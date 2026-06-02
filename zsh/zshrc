@@ -1,14 +1,9 @@
-# Load configuration files
-source "$HOME/.config/zsh/env.zsh"
+# zsh entrypoint
+source "${XDG_CONFIG_HOME:-$HOME/.config}/zsh/env.zsh"
+source "$XDG_CONFIG_HOME/zsh/paths.zsh"
+source "$XDG_CONFIG_HOME/zsh/oh-my-zsh.zsh"
 source "$XDG_CONFIG_HOME/zsh/aliases.zsh"
-source "$XDG_CONFIG_HOME/zsh/functions.zsh"
 
-# Plugins
-plugins=(
-	git
-	zsh-autosuggestions
-	zsh-syntax-highlighting
-	vi-mode
-)
+source "$ZSH/oh-my-zsh.sh"
 
-source $ZSH/oh-my-zsh.sh
+source "$XDG_CONFIG_HOME/zsh/tools.zsh"
