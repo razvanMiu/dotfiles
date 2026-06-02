@@ -1,0 +1,14 @@
+# Load configuration files
+source "$HOME/.config/zsh/env.zsh"
+source "$XDG_CONFIG_HOME/zsh/aliases.zsh"
+source "$XDG_CONFIG_HOME/zsh/functions.zsh"
+
+# Plugins
+plugins=(
+	git
+	zsh-autosuggestions
+	zsh-syntax-highlighting
+	vi-mode
+)
+
+source $ZSH/oh-my-zsh.sh
