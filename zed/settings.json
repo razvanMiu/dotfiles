@@ -1,0 +1,43 @@
+{
+  "project_panel": {
+    "dock": "left"
+  },
+  "outline_panel": {
+    "dock": "left"
+  },
+  "collaboration_panel": {
+    "dock": "left"
+  },
+  "agent": {
+    "dock": "right",
+    "favorite_models": [],
+    "model_parameters": []
+  },
+  "git_panel": {
+    "dock": "left"
+  },
+  "vim_mode": false,
+  "text_rendering_mode": "platform_default",
+  "ui_font_family": "JetBrainsMono Nerd Font",
+  "buffer_font_family": "JetBrainsMono Nerd Font",
+  "icon_theme": "Catppuccin Macchiato",
+  "ui_font_size": 15.0,
+  "buffer_font_size": 15,
+  "theme": {
+    "mode": "dark",
+    "light": "Catppuccin Latte",
+    "dark": "Catppuccin Mocha",
+  },
+  "languages": {
+    "JavaScript": {
+      "code_actions_on_format": {
+        "source.fixAll.eslint": true,
+      },
+    },
+    "TypeScript": {
+      "code_actions_on_format": {
+        "source.fixAll.eslint": true,
+      },
+    },
+  },
+}

@@ -1,3 +1,6 @@
+.env
+
+# Vendor/runtime state
 oh-my-zsh/
 go/
 BraveSoftware/

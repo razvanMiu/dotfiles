@@ -1,1 +1,33 @@
-exec ~/.local/bin/startdwm.sh
+#!/bin/sh
+
+# Minimal desktop-session identity for bare WMs.
+# xdg-desktop-portal uses XDG_CURRENT_DESKTOP to select *-portals.conf.
+export XDG_CURRENT_DESKTOP="${XDG_CURRENT_DESKTOP:-dwm}"
+export XDG_SESSION_DESKTOP="${XDG_SESSION_DESKTOP:-dwm}"
+export DESKTOP_SESSION="${DESKTOP_SESSION:-dwm}"
+export XDG_SESSION_TYPE="${XDG_SESSION_TYPE:-x11}"
+
+# Ensure a session bus exists when starting dwm from startx.
+# Display managers usually provide DBUS_SESSION_BUS_ADDRESS already.
+if [ -z "${DBUS_SESSION_BUS_ADDRESS:-}" ] && command -v dbus-run-session >/dev/null 2>&1; then
+    exec dbus-run-session "$0" "$@"
+fi
+
+# Arch/systemd-user integration. This imports DISPLAY/XAUTHORITY into the
+# user manager so D-Bus activated services (portals/keyring prompts) can see X.
+if [ -r /etc/X11/xinit/xinitrc.d/50-systemd-user.sh ]; then
+    . /etc/X11/xinit/xinitrc.d/50-systemd-user.sh
+fi
+
+if command -v dbus-update-activation-environment >/dev/null 2>&1; then
+    dbus-update-activation-environment --systemd \
+        DISPLAY XAUTHORITY XDG_CURRENT_DESKTOP XDG_SESSION_DESKTOP DESKTOP_SESSION XDG_SESSION_TYPE
+fi
+
+# Secret Service provider for non-DE sessions. No-op until gnome-keyring is installed.
+if command -v gnome-keyring-daemon >/dev/null 2>&1; then
+    eval "$(gnome-keyring-daemon --start --components=secrets)"
+    export SSH_AUTH_SOCK
+fi
+
+exec "$HOME/.local/bin/startdwm.sh"

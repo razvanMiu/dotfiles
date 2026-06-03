@@ -3,7 +3,17 @@
   "defaultProvider": "openai-codex",
   "defaultModel": "gpt-5.5",
   "defaultThinkingLevel": "medium",
+  "enableSkillCommands": true,
+  "skills": [
+    "../../agents/skills"
+  ],
   "packages": [
-    "npm:pi-web-access"
+    "npm:pi-web-access",
+    "npm:pi-subagents",
+    "npm:pi-observational-memory",
+    "npm:pi-sensitive-guard",
+    "git:github.com/elpapi42/pi-fork",
+    "npm:pi-mcp-adapter",
+    "npm:pi-rtk-optimizer"
   ]
 }

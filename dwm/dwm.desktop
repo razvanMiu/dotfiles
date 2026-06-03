@@ -2,6 +2,7 @@
 Encoding=UTF-8
 Name=Dwm
 Comment=Dynamic window manager
-Exec=~/.config/X11/xinitrc
+Exec=/home/razvan/.config/X11/xinitrc
 Icon=dwm
 Type=XSession
+DesktopNames=dwm

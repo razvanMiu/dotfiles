@@ -1,0 +1,24 @@
+{
+  "sources": [
+    {
+      "name": "mattpocock",
+      "repo": "git@github.com:mattpocock/skills.git",
+      "ref": "",
+      "skills": [
+        { "path": "skills/engineering/diagnose" },
+        { "path": "skills/engineering/grill-with-docs" },
+        { "path": "skills/engineering/improve-codebase-architecture" },
+        { "path": "skills/engineering/prototype" },
+        { "path": "skills/engineering/tdd" },
+        { "path": "skills/engineering/to-issues" },
+        { "path": "skills/engineering/to-prd" },
+        { "path": "skills/engineering/triage" },
+        { "path": "skills/engineering/zoom-out" },
+        { "path": "skills/productivity/caveman" },
+        { "path": "skills/productivity/grill-me" },
+        { "path": "skills/productivity/handoff" },
+        { "path": "skills/productivity/write-a-skill" }
+      ]
+    }
+  ]
+}

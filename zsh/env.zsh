@@ -7,7 +7,8 @@ export XDG_BIN_HOME="${XDG_BIN_HOME:-$HOME/.local/bin}"
 export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-$HOME/.local/run}"
 
 # X11
-export XAUTHORITY="$XDG_RUNTIME_DIR/Xauthority"
+# Preserve display-manager supplied XAUTHORITY (ly uses $XDG_RUNTIME_DIR/lyxauth).
+export XAUTHORITY="${XAUTHORITY:-$XDG_RUNTIME_DIR/Xauthority}"
 export XINITRC="$XDG_CONFIG_HOME/X11/xinitrc"
 
 # History
