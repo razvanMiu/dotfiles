@@ -1,0 +1,124 @@
+@import "themes/catppuccin-macchiato.rasi"
+
+* {
+    font: "JetBrainsMono Nerd Font 10";
+
+    background:         @base;
+    background-alt:     @mantle;
+    foreground:         @text;
+    muted:              @overlay0;
+    accent:             @mauve;
+    accent-alt:         @lavender;
+    urgent:             @red;
+
+    background-color:   transparent;
+    text-color:         @foreground;
+    margin:             0;
+    padding:            0;
+    spacing:            0;
+}
+
+window {
+    location:           center;
+    width:              560px;
+    border:             2px;
+    border-radius:      18px;
+    border-color:       @accent;
+    background-color:   @background;
+}
+
+mainbox {
+    padding:            16px;
+    spacing:            0;
+    background-color:   transparent;
+}
+
+inputbar {
+    padding:            10px 14px;
+    spacing:            10px;
+    border:             1px;
+    border-radius:      14px;
+    border-color:       @surface1;
+    background-color:   @surface0;
+    children:           [ prompt, entry ];
+}
+
+prompt {
+    text-color:         @accent;
+}
+
+entry {
+    placeholder:        "Search apps";
+    placeholder-color:  @muted;
+    text-color:         @foreground;
+}
+
+listview {
+    lines:              8;
+    columns:            1;
+    fixed-height:       false;
+    dynamic:            true;
+    spacing:            6px;
+    margin:             12px 0 0;
+    padding:            0;
+    border:             0;
+    scrollbar:          false;
+    background-color:   transparent;
+}
+
+element {
+    padding:            9px 12px;
+    spacing:            10px;
+    border-radius:      12px;
+    background-color:   transparent;
+    text-color:         @foreground;
+}
+
+element normal.normal,
+element alternate.normal {
+    background-color:   transparent;
+    text-color:         @foreground;
+}
+
+element selected.normal,
+element selected.active {
+    background-color:   @accent;
+    text-color:         @base;
+}
+
+element normal.active,
+element alternate.active {
+    background-color:   @surface0;
+    text-color:         @green;
+}
+
+element normal.urgent,
+element alternate.urgent,
+element selected.urgent {
+    background-color:   @urgent;
+    text-color:         @base;
+}
+
+element-icon {
+    size:               1.2em;
+    vertical-align:     0.5;
+    background-color:   transparent;
+    text-color:         inherit;
+}
+
+element-text {
+    background-color:   transparent;
+    text-color:         inherit;
+}
+
+message {
+    margin:             0;
+    padding:            10px;
+    border:             0;
+    border-radius:      12px;
+    background-color:   @surface0;
+}
+
+textbox {
+    text-color:         @foreground;
+}

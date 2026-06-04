@@ -1,0 +1,12 @@
+#!/bin/sh
+state_file="${XDG_STATE_HOME:-$HOME/.local/state}/rofi/last-mode"
+mode="drun"
+
+if [ -r "$state_file" ]; then
+    read -r saved < "$state_file"
+    case "$saved" in
+        drun|window) mode="$saved" ;;
+    esac
+fi
+
+exec rofi -show "$mode" "$@"

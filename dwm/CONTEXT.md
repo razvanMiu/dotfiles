@@ -11,3 +11,7 @@ _Avoid_: tdrop terminal, quake terminal, scratchpad kitty
 **Scratchpad**:
 A persistent window that can be hidden and shown without being tied to one normal tag.
 _Avoid_: normal terminal, tagged terminal
+
+**Polished minimal desktop**:
+A restrained dwm setup that improves daily-use clarity and visual cohesion without adding a heavy rice stack or fragile visual dependencies.
+_Avoid_: full rice, heavy desktop environment, effect-heavy setup

@@ -6,25 +6,25 @@ static const unsigned int snap      = 32;       /* snap pixel */
 static const int showbar            = 1;        /* 0 means no bar */
 static const int topbar             = 1;        /* 0 means bottom bar */
 static const char *fonts[]          = { "JetBrainsMono Nerd Font:size=10" };
-static const char col_gray1[]       = "#222222";
-static const char col_gray2[]       = "#444444";
-static const char col_gray3[]       = "#bbbbbb";
-static const char col_gray4[]       = "#eeeeee";
-static const char col_cyan[]        = "#88C0D0";
+static const char col_base[]        = "#24273a"; /* Catppuccin Macchiato */
+static const char col_surface0[]    = "#363a4f";
+static const char col_text[]        = "#cad3f5";
+static const char col_mauve[]       = "#c6a0f6";
 static const char *colors[][3]      = {
-	/*               fg         bg         border   */
-	[SchemeNorm] = { col_gray3, col_gray1, col_gray2 },
-	[SchemeSel]  = { col_gray4, col_cyan,  col_cyan  },
+	/*               fg         bg            border   */
+	[SchemeNorm] = { col_text,  col_base,     col_surface0 },
+	[SchemeSel]  = { col_text,  col_surface0, col_mauve    },
 };
 
 /* tagging */
 static const char *tags[] = { "1", "2", "3", "4", "5", "6", "7", "8", "9" };
 
 static const Rule rules[] = {
-	/* class            instance    title       tags mask       isfloating      monitor */
-	{ "brave-browser",  NULL,       NULL,       1 << 8,         0,              -1 },
-	{ "zed",            NULL,       NULL,       1 << 0,         0,              -1 },
-	{ "terminal",       NULL,       NULL,       ~0,       	    1,              -1 },
+	/* class                 instance    title       tags mask       isfloating      dropdown       monitor */
+	{ "Brave-browser",       NULL,       NULL,       1 << 8,         0,              -1,            -1 },
+	{ "zed",                 NULL,       NULL,       1 << 0,         0,              -1,            -1 },
+	{ "dropdown-terminal",   NULL,       NULL,       0,              1,              0,             -1 },
+	{ "dropdown-test",       NULL,       NULL,       0,              1,              1,             -1 },
 };
 
 /* layout(s) */
@@ -51,15 +51,25 @@ static const Layout layouts[] = {
 
 /* helper for spawning shell commands in the pre dwm-5.0 fashion */
 #define SHCMD(cmd) { .v = (const char*[]){ "/bin/sh", "-c", cmd, NULL } }
+#define XDG_CONFIG_CMD(path) { "/bin/sh", "-c", "exec \"${XDG_CONFIG_HOME:-$HOME/.config}/" path "\"", NULL }
 
 /* commands */
 static char dmenumon[2] = "0";  /* component of dmenucmd, manipulated in spawn() */
-static const char *dmenucmd[] = { "rofi", "-show", "drun", "-theme", "~/.config/rofi/themes/rounded-nord-dark.rasi", NULL };
-static const char *termcmd[] = { "tdrop", "-a", "-m", "-r", "-Sx", "-x", "1", "-y", "19", "-w", "-2", "-h", "50%", "--class", "terminal", "kitty", "--class", "terminal", NULL };
+static const char *dmenucmd[] = XDG_CONFIG_CMD("rofi/scripts/launcher");
+static const char *droptermcmd[] = { "kitty", "--class", "dropdown-terminal", NULL };
+static const char *droptestcmd[] = { "kitty", "--class", "dropdown-test", "--title", "dropdown-test", NULL };
+
+/* Dropdowns commands */
+static const Dropdown dropdowns[] = {
+	/* command       width factor  height factor */
+	{ droptermcmd,   1.0,          0.5 },
+	{ droptestcmd,   0.8,          0.35 },
+};
 
 static const Key keys[] = {
 	/* modifier                     key        function        argument */
-	{ MODKEY,           XK_grave,   spawn,	   {.v = termcmd } },
+	{ MODKEY,           XK_grave,   toggledropdown, {.i = 0 } },
+	{ MODKEY,           XK_n,       toggledropdown, {.i = 1 } },
 	{ MODKEY,			XK_space,   spawn,	   {.v = dmenucmd } },
 	{ MODKEY,                       XK_b,      togglebar,      {0} },
 	{ MODKEY,                       XK_j,      focusstack,     {.i = +1 } },
@@ -101,7 +111,6 @@ static const Button buttons[] = {
 	{ ClkLtSymbol,          0,              Button1,        setlayout,      {0} },
 	{ ClkLtSymbol,          0,              Button3,        setlayout,      {.v = &layouts[2]} },
 	{ ClkWinTitle,          0,              Button2,        zoom,           {0} },
-	{ ClkStatusText,        0,              Button2,        spawn,          {.v = termcmd } },
 	{ ClkClientWin,         MODKEY,         Button1,        movemouse,      {0} },
 	{ ClkClientWin,         MODKEY,         Button2,        togglefloating, {0} },
 	{ ClkClientWin,         MODKEY,         Button3,        resizemouse,    {0} },

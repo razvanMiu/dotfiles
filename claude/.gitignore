@@ -1,0 +1,24 @@
+# Default-deny: ignore everything in this dir, then re-include safe config.
+# This guarantees secrets/state never leak even if Claude Code adds new files.
+*
+
+# --- Track only portable, non-sensitive config ---
+!.gitignore
+!settings.json
+!CLAUDE.md
+
+# Symlink to shared skills collection (-> ~/.config/agents/skills).
+# Tracked as a symlink so it's recreated on a fresh checkout.
+!skills
+
+# Plugin marketplace registry (config), but not the cloned repos themselves
+!plugins/
+plugins/*
+!plugins/known_marketplaces.json
+
+# --- Notes on what stays ignored (secrets / runtime / history) ---
+#   .credentials.json          -> auth tokens
+#   .claude.json               -> account info + local state
+#   .credentials.json, sessions/, projects/, history.jsonl, file-history/,
+#   plans/, session-env/, shell-snapshots/, cache/, downloads/, backups/,
+#   mcp-needs-auth-cache.json  -> machine-local runtime data

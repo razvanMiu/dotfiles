@@ -27,6 +27,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 #include <unistd.h>
 #include <sys/types.h>
 #include <sys/wait.h>
@@ -49,7 +50,9 @@
 #define CLEANMASK(mask)         (mask & ~(numlockmask|LockMask) & (ShiftMask|ControlMask|Mod1Mask|Mod2Mask|Mod3Mask|Mod4Mask|Mod5Mask))
 #define INTERSECT(x,y,w,h,m)    (MAX(0, MIN((x)+(w),(m)->wx+(m)->ww) - MAX((x),(m)->wx)) \
                                * MAX(0, MIN((y)+(h),(m)->wy+(m)->wh) - MAX((y),(m)->wy)))
+#define ISDROPDOWN(C)           ((C)->dropdown >= 0)
 #define ISVISIBLE(C)            ((C->tags & C->mon->tagset[C->mon->seltags]))
+#define MAXDROPDOWNS            8
 #define MOUSEMASK               (BUTTONMASK|PointerMotionMask)
 #define WIDTH(X)                ((X)->w + 2 * (X)->bw)
 #define HEIGHT(X)               ((X)->h + 2 * (X)->bw)
@@ -92,6 +95,7 @@ struct Client {
 	int bw, oldbw;
 	unsigned int tags;
 	int isfixed, isfloating, isurgent, neverfocus, oldstate, isfullscreen;
+	int dropdown;
 	Client *next;
 	Client *snext;
 	Monitor *mon;
@@ -118,6 +122,7 @@ struct Monitor {
 	int by;               /* bar geometry */
 	int mx, my, mw, mh;   /* screen size */
 	int wx, wy, ww, wh;   /* window area  */
+	int dropw[MAXDROPDOWNS], droph[MAXDROPDOWNS]; /* remembered dropdown sizes */
 	unsigned int seltags;
 	unsigned int sellt;
 	unsigned int tagset[2];
@@ -137,8 +142,15 @@ typedef struct {
 	const char *title;
 	unsigned int tags;
 	int isfloating;
+	int dropdown;
 	int monitor;
 } Rule;
+
+typedef struct {
+	const char **cmd;
+	float wfact;
+	float hfact;
+} Dropdown;
 
 /* function declarations */
 static void applyrules(Client *c);
@@ -162,6 +174,9 @@ static void detachstack(Client *c);
 static Monitor *dirtomon(int dir);
 static void drawbar(Monitor *m);
 static void drawbars(void);
+static int dropdownprotected(Client *c);
+static unsigned int dropdowntags(Client *c, Monitor *m);
+static Client *finddropdown(int dropdown);
 /* static void enternotify(XEvent *e); */
 static void expose(XEvent *e);
 static void focus(Client *c);
@@ -181,15 +196,21 @@ static void manage(Window w, XWindowAttributes *wa);
 static void mappingnotify(XEvent *e);
 static void maprequest(XEvent *e);
 static void monocle(Monitor *m);
+static void managedropdown(Client *c);
+static void movedropdown(Client *c, Monitor *m);
 static void motionnotify(XEvent *e);
 static void movemouse(const Arg *arg);
 static Client *nexttiled(Client *c);
 static void pop(Client *c);
+static void placedropdown(Client *c);
+static void placedropdownifvisible(Client *c);
+static void placedropdowns(Monitor *m);
 static void propertynotify(XEvent *e);
 static void quit(const Arg *arg);
 static Monitor *recttomon(int x, int y, int w, int h);
 static void resize(Client *c, int x, int y, int w, int h, int interact);
 static void resizeclient(Client *c, int x, int y, int w, int h);
+static void raisedropdown(Monitor *m);
 static void resizemouse(const Arg *arg);
 static void restack(Monitor *m);
 static void run(void);
@@ -205,10 +226,14 @@ static void setup(void);
 static void seturgent(Client *c, int urg);
 static void showhide(Client *c);
 static void spawn(const Arg *arg);
+static void replaceifdropdown(Client *c);
+static void setruledropdown(Client *c, const Rule *r);
+static void storedropdownsize(Client *c);
 static void tag(const Arg *arg);
 static void tagmon(const Arg *arg);
 static void tile(Monitor *m);
 static void togglebar(const Arg *arg);
+static void toggledropdown(const Arg *arg);
 static void togglefloating(const Arg *arg);
 static void toggletag(const Arg *arg);
 static void toggleview(const Arg *arg);
@@ -269,9 +294,11 @@ static Window root, wmcheckwin;
 
 /* configuration, allows nested code to access above variables */
 #include "config.h"
+#include "dropdown.c"
 
 /* compile-time check if all tags fit into an unsigned int bit array. */
 struct NumTags { char limitexceeded[LENGTH(tags) > 31 ? -1 : 1]; };
+struct NumDropdowns { char limitexceeded[LENGTH(dropdowns) > MAXDROPDOWNS ? -1 : 1]; };
 
 /* function implementations */
 void
@@ -297,6 +324,7 @@ applyrules(Client *c)
 		&& (!r->instance || strstr(instance, r->instance)))
 		{
 			c->isfloating = r->isfloating;
+			setruledropdown(c, r);
 			c->tags |= r->tags;
 			for (m = mons; m && m->num != r->monitor; m = m->next);
 			if (m)
@@ -525,8 +553,14 @@ clientmessage(XEvent *e)
 			setfullscreen(c, (cme->data.l[0] == 1 /* _NET_WM_STATE_ADD    */
 				|| (cme->data.l[0] == 2 /* _NET_WM_STATE_TOGGLE */ && !c->isfullscreen)));
 	} else if (cme->message_type == netatom[NetActiveWindow]) {
-		if (c != selmon->sel && !c->isurgent)
-			seturgent(c, 1);
+		if (c->mon != selmon)
+			selmon = c->mon;
+		if (!ISVISIBLE(c) && c->tags) {
+			selmon->tagset[selmon->seltags] = c->tags & TAGMASK;
+			arrange(selmon);
+		}
+		focus(c);
+		restack(selmon);
 	}
 }
 
@@ -569,6 +603,8 @@ configurenotify(XEvent *e)
 				for (c = m->clients; c; c = c->next)
 					if (c->isfullscreen)
 						resizeclient(c, m->mx, m->my, m->mw, m->mh);
+					else
+						placedropdownifvisible(c);
 				XMoveResizeWindow(dpy, m->barwin, m->wx, m->by, m->ww, bh);
 			}
 			focus(NULL);
@@ -1037,6 +1073,7 @@ manage(Window w, XWindowAttributes *wa)
 
 	c = ecalloc(1, sizeof(Client));
 	c->win = w;
+	c->dropdown = -1;
 	/* geometry */
 	c->x = c->oldx = wa->x;
 	c->y = c->oldy = wa->y;
@@ -1070,6 +1107,7 @@ manage(Window w, XWindowAttributes *wa)
 	updatewmhints(c);
 	XSelectInput(dpy, w, EnterWindowMask|FocusChangeMask|PropertyChangeMask|StructureNotifyMask);
 	grabbuttons(c, 0);
+	managedropdown(c);
 	if (!c->isfloating)
 		c->isfloating = c->oldstate = trans != None || c->isfixed;
 	if (c->isfloating)
@@ -1196,7 +1234,9 @@ movemouse(const Arg *arg)
 	} while (ev.type != ButtonRelease);
 	XUngrabPointer(dpy, CurrentTime);
 	if ((m = recttomon(c->x, c->y, c->w, c->h)) != selmon) {
+		storedropdownsize(c);
 		sendmon(c, m);
+		replaceifdropdown(c);
 		selmon = m;
 		focus(NULL);
 	}
@@ -1348,7 +1388,9 @@ resizemouse(const Arg *arg)
 	XUngrabPointer(dpy, CurrentTime);
 	while (XCheckMaskEvent(dpy, EnterWindowMask, &ev));
 	if ((m = recttomon(c->x, c->y, c->w, c->h)) != selmon) {
+		storedropdownsize(c);
 		sendmon(c, m);
+		replaceifdropdown(c);
 		selmon = m;
 		focus(NULL);
 	}
@@ -1366,6 +1408,7 @@ restack(Monitor *m)
 		return;
 	if (m->sel->isfloating || !m->lt[m->sellt]->arrange)
 		XRaiseWindow(dpy, m->sel->win);
+	raisedropdown(m);
 	if (m->lt[m->sellt]->arrange) {
 		wc.stack_mode = Below;
 		wc.sibling = m->barwin;
@@ -1426,7 +1469,7 @@ sendmon(Client *c, Monitor *m)
 	detach(c);
 	detachstack(c);
 	c->mon = m;
-	c->tags = m->tagset[m->seltags]; /* assign tags of target monitor */
+	c->tags = dropdowntags(c, m); /* assign tags of target monitor */
 	attach(c);
 	attachstack(c);
 	if (c->isfullscreen)
@@ -1670,6 +1713,8 @@ void
 tag(const Arg *arg)
 {
 	if (selmon->sel && arg->ui & TAGMASK) {
+		if (dropdownprotected(selmon->sel))
+			return;
 		selmon->sel->tags = arg->ui & TAGMASK;
 		focus(NULL);
 		arrange(selmon);
@@ -1680,6 +1725,8 @@ void
 tagmon(const Arg *arg)
 {
 	if (!selmon->sel || !mons->next)
+		return;
+	if (dropdownprotected(selmon->sel))
 		return;
 	sendmon(selmon->sel, dirtomon(arg->i));
 }
@@ -1718,6 +1765,7 @@ togglebar(const Arg *arg)
 	selmon->showbar = !selmon->showbar;
 	updatebarpos(selmon);
 	XMoveResizeWindow(dpy, selmon->barwin, selmon->wx, selmon->by, selmon->ww, bh);
+	placedropdowns(selmon);
 	arrange(selmon);
 }
 
@@ -1726,7 +1774,7 @@ togglefloating(const Arg *arg)
 {
 	if (!selmon->sel)
 		return;
-	if (selmon->sel->isfullscreen) /* no support for fullscreen windows */
+	if (selmon->sel->isfullscreen || dropdownprotected(selmon->sel)) /* no support for fullscreen or dropdown windows */
 		return;
 	selmon->sel->isfloating = !selmon->sel->isfloating || selmon->sel->isfixed;
 	if (selmon->sel->isfloating)
@@ -1743,6 +1791,8 @@ toggletag(const Arg *arg)
 	if (!selmon->sel)
 		return;
 	newtags = selmon->sel->tags ^ (arg->ui & TAGMASK);
+	if (dropdownprotected(selmon->sel))
+		return;
 	if (newtags) {
 		selmon->sel->tags = newtags;
 		focus(NULL);
@@ -1781,6 +1831,7 @@ unmanage(Client *c, int destroyed)
 	Monitor *m = c->mon;
 	XWindowChanges wc;
 
+	storedropdownsize(c);
 	detach(c);
 	detachstack(c);
 	if (!destroyed) {

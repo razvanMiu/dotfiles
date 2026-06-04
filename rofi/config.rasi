@@ -1,0 +1,16 @@
+@import "catppuccin-config.rasi"
+
+configuration {
+    modes: "drun,window";
+    fixed-num-lines: false;
+    kb-element-next: "";
+    kb-element-prev: "";
+    kb-row-tab: "";
+    kb-mode-next: "Tab";
+    kb-mode-previous: "ISO_Left_Tab";
+    kb-accept-entry: "Return,KP_Enter";
+    kb-remove-to-eol: "";
+    kb-row-down: "Down,Control+n,Control+j";
+    kb-row-up: "Up,Control+p,Control+k";
+    on-mode-changed: "sh -c 'exec \"${XDG_CONFIG_HOME:-$HOME/.config}/rofi/scripts/remember-mode-change\"'";
+}

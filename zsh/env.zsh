@@ -24,6 +24,9 @@ export EDITOR=nvim
 export npm_config_cache="$XDG_CACHE_HOME/npm"
 export npm_config_logs_dir="$XDG_STATE_HOME/npm/logs"
 
+# Claude Code
+export CLAUDE_CONFIG_DIR="$XDG_CONFIG_HOME/claude"
+
 # Pi coding agent
 export PI_CODING_AGENT_DIR="$XDG_CONFIG_HOME/pi/agent"
 export PI_CODING_AGENT_SESSION_DIR="$XDG_STATE_HOME/pi/sessions"

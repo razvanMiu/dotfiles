@@ -1,9 +1,34 @@
-.env
+# Default-deny allowlist.
+#
+# Ignore every top-level entry, then explicitly un-ignore what we track.
+# New stuff apps dump into ~/.config stays ignored until added below,
+# so nothing leaks into the dotfiles repo by accident.
+#
+# `/*` is anchored to the repo root, so it only hides top-level entries —
+# files *inside* an un-ignored dir are not re-ignored by it.
+# To track a new dir/file: add a `!/<name>` line (keep alphabetical).
+/*
 
-# Vendor/runtime state
-oh-my-zsh/
-go/
-BraveSoftware/
-dconf/
-pulse/
-systemd/
+# Files
+!/.env.example
+!/.gitignore
+!/CONTEXT.md
+!/README.md
+
+# Directories
+!/agents/
+!/bws/
+!/claude/
+!/docs/
+!/dwm/
+!/git/
+!/kitty/
+!/nvim/
+!/pi/
+!/picom/
+!/rofi/
+!/scripts/
+!/X11/
+!/xdg-desktop-portal/
+!/zed/
+!/zsh/
