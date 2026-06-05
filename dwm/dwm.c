@@ -58,6 +58,7 @@
 #define HEIGHT(X)               ((X)->h + 2 * (X)->bw)
 #define TAGMASK                 ((1 << LENGTH(tags)) - 1)
 #define TEXTW(X)                (drw_fontset_getwidth(drw, (X)) + lrpad)
+#define STATUSSEP               '\037'
 
 /* enums */
 enum { CurNormal, CurResize, CurMove, CurLast }; /* cursor */
@@ -150,7 +151,14 @@ typedef struct {
 	const char **cmd;
 	float wfact;
 	float hfact;
+	float xfact;
 } Dropdown;
+
+typedef struct {
+	const char *name;
+	void (*func)(const Arg *);
+	const Arg arg;
+} StatusSegment;
 
 /* function declarations */
 static void applyrules(Client *c);
@@ -174,9 +182,11 @@ static void detachstack(Client *c);
 static Monitor *dirtomon(int dir);
 static void drawbar(Monitor *m);
 static void drawbars(void);
+static void drawstatus(Monitor *m, int w);
 static int dropdownprotected(Client *c);
 static unsigned int dropdowntags(Client *c, Monitor *m);
 static Client *finddropdown(int dropdown);
+static void dropdownsetmfact(const Arg *arg);
 /* static void enternotify(XEvent *e); */
 static void expose(XEvent *e);
 static void focus(Client *c);
@@ -226,6 +236,9 @@ static void setup(void);
 static void seturgent(Client *c, int urg);
 static void showhide(Client *c);
 static void spawn(const Arg *arg);
+static int statussegment(int *offset, char *text, size_t size);
+static void statusclick(XButtonPressedEvent *ev);
+static int statuswidth(void);
 static void replaceifdropdown(Client *c);
 static void setruledropdown(Client *c, const Rule *r);
 static void storedropdownsize(Client *c);
@@ -233,6 +246,8 @@ static void tag(const Arg *arg);
 static void tagmon(const Arg *arg);
 static void tile(Monitor *m);
 static void togglebar(const Arg *arg);
+static void toggleaudiowidget(const Arg *arg);
+static void togglecalendarwidget(const Arg *arg);
 static void toggledropdown(const Arg *arg);
 static void togglefloating(const Arg *arg);
 static void toggletag(const Arg *arg);
@@ -293,8 +308,10 @@ static Monitor *mons, *selmon;
 static Window root, wmcheckwin;
 
 /* configuration, allows nested code to access above variables */
+#define DWM_CONTEXT
 #include "config.h"
-#include "dropdown.c"
+#include "features/dropdown.c"
+#include "features/status.c"
 
 /* compile-time check if all tags fit into an unsigned int bit array. */
 struct NumTags { char limitexceeded[LENGTH(tags) > 31 ? -1 : 1]; };
@@ -468,9 +485,10 @@ buttonpress(XEvent *e)
 			arg.ui = 1 << i;
 		} else if (ev->x < x + TEXTW(selmon->ltsymbol))
 			click = ClkLtSymbol;
-		else if (ev->x > selmon->ww - (int)TEXTW(stext) + lrpad - 2)
+		else if (ev->x > selmon->ww - statuswidth()) {
 			click = ClkStatusText;
-		else
+			statusclick(ev);
+		} else
 			click = ClkWinTitle;
 	} else if ((c = wintoclient(ev->window))) {
 		focus(c);
@@ -744,9 +762,8 @@ drawbar(Monitor *m)
 
 	/* draw status first so it can be overdrawn by tags later */
 	if (m == selmon) { /* status is only drawn on selected monitor */
-		drw_setscheme(drw, scheme[SchemeNorm]);
-		tw = TEXTW(stext) - lrpad + 2; /* 2px right padding */
-		drw_text(drw, m->ww - tw, 0, tw, bh, 0, stext, 0);
+		tw = statuswidth();
+		drawstatus(m, tw);
 	}
 
 	for (c = m->clients; c; c = c->next) {

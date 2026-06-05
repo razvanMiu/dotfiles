@@ -1,0 +1,33 @@
+#!/bin/sh
+
+# dwm status click dispatcher.
+# dwm sets:
+#   STATUS_INDEX  zero-based structured status segment index
+#   STATUS_BUTTON X11 button number
+#   STATUS_TEXT   full visible status text
+
+state_dir="${XDG_STATE_HOME:-$HOME/.local/state}/dwm"
+mkdir -p "$state_dir"
+
+segments="cpu gpu ram volume time"
+segment=$(printf '%s\n' "$segments" | awk -v n="${STATUS_INDEX:-}" '{ print $(n + 1) }')
+button=${STATUS_BUTTON:-0}
+
+printf '%s segment=%s index=%s button=%s text=%s\n' \
+	"$(date '+%F %T')" "$segment" "${STATUS_INDEX:-}" "$button" "${STATUS_TEXT:-}" \
+	>> "$state_dir/status-click.log"
+
+case "$segment" in
+	cpu|gpu|ram)
+		# Placeholder for future system-info popup.
+		command -v notify-send >/dev/null 2>&1 && notify-send "dwm status" "$segment clicked"
+		;;
+	volume)
+		# Volume is handled directly by dwm statussegments[] as the Audio tab in dropdown-widgets.
+		:
+		;;
+	time)
+		# Time is handled directly by dwm statussegments[] as the Calendar tab in dropdown-widgets.
+		:
+		;;
+esac

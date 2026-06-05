@@ -10,4 +10,4 @@ We will replace the external `tdrop`-managed Kitty dropdown with a dwm-native dr
 
 ## Consequences
 
-The implementation will live mostly in an included `dropdown.c` file to keep the main `dwm.c` readable while still sharing dwm's static internals. It is configured through `dropdowns[]`, rule dropdown indexes, and keybindings that pass a dropdown index, so additional dropdown-like windows can be added from `config.h` without duplicating core logic. Small changes to `dwm.c` remain necessary for client/monitor state, key dispatch, protected operations, and z-order integration.
+The implementation will live mostly in an included `features/dropdown.c` file to keep the main `dwm.c` readable while still sharing dwm's static internals. It is configured through `dropdowns[]`, rule dropdown indexes, and keybindings that pass a dropdown index, so additional dropdown-like windows can be added from `config.h` without duplicating core logic. Small changes to `dwm.c` remain necessary for client/monitor state, key dispatch, protected operations, and z-order integration.

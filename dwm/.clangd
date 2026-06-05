@@ -1,0 +1,17 @@
+# dwm uses included configuration/feature fragments rather than standalone
+# translation units. clangd parses opened fragments independently, before dwm.c
+# has defined enums/types such as SchemeNorm, Client, Monitor, and Arg.
+# Keep full diagnostics for real root translation units like dwm.c, drw.c, util.c.
+If:
+  PathMatch: "(config|config\\.def)\\.h"
+CompileFlags:
+  Add: ["-x", "c", "-include", "/home/razvan/.config/dwm/features/config-clangd.h"]
+Diagnostics:
+  Suppress: ["*"]
+---
+If:
+  PathMatch: "features/.*\\.c"
+CompileFlags:
+  Add: ["-x", "c", "-DDWM_CONTEXT", "-include", "/home/razvan/.config/dwm/features/clangd.h"]
+Diagnostics:
+  Suppress: ["*"]

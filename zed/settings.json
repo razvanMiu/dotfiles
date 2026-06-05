@@ -17,7 +17,7 @@
   "git_panel": {
     "dock": "left",
   },
-  "vim_mode": false,
+  "vim_mode": true,
   "text_rendering_mode": "platform_default",
   "ui_font_family": "JetBrainsMono Nerd Font",
   "buffer_font_family": "JetBrainsMono Nerd Font",

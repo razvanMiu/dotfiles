@@ -1,6 +1,6 @@
 ---
 name: dwm-modifier
-description: Modify Razvan's personalized suckless dwm setup safely, including config changes, native C patches, dropdown features, X11 behavior, build/install workflow, and patch hygiene. Use when changing /home/razvan/.config/dwm files such as config.h, config.def.h, dwm.c, dropdown.c, CONTEXT.md, ADRs, or when debugging dwm runtime behavior, WM_CLASS rules, keybindings, multi-monitor behavior, focus, tags, floating, or restart/install issues.
+description: Modify Razvan's personalized suckless dwm setup safely, including config changes, native C patches, dropdown/status features, X11 behavior, build/install workflow, and patch hygiene. Use when changing /home/razvan/.config/dwm files such as config.h, config.def.h, dwm.c, features/dropdown.c, features/status.c, CONTEXT.md, ADRs, or when debugging dwm runtime behavior, WM_CLASS rules, keybindings, multi-monitor behavior, focus, tags, floating, status rendering, or restart/install issues.
 ---
 
 # DWM Modifier
@@ -21,7 +21,7 @@ Do **not** install, kill X, restart dwm, or press restart keybindings unless the
 - Active build config: `config.h`.
 - Template/default config: `config.def.h`; keep structurally compatible when changing public config types, but remember existing builds use `config.h`.
 - Main source: `dwm.c`.
-- Native dropdown implementation: `dropdown.c`, included from `dwm.c` after `config.h`.
+- Local feature modules live under `features/`, included from `dwm.c` after `config.h`: `features/dropdown.c` and `features/status.c`.
 - Domain docs: read `CONTEXT.md` and relevant `docs/adr/*.md` before changing terminology or behavior.
 - Session startup: `dwm.desktop` -> `/home/razvan/.config/X11/xinitrc` -> `~/.local/bin/startdwm.sh`.
 - Installed binary target: usually `/usr/local/bin/dwm` from `config.mk`.
@@ -36,7 +36,7 @@ Do **not** install, kill X, restart dwm, or press restart keybindings unless the
 2. **Classify the change**
    - Config-only: keybindings, rules, commands, layout constants.
    - Template-shape change: update both `config.h` and `config.def.h`.
-   - Native feature/patch: keep `dwm.c` hooks minimal; prefer an included focused file like `dropdown.c` for feature logic.
+   - Native feature/patch: keep `dwm.c` hooks minimal; prefer an included focused file under `features/` for feature logic.
    - Runtime/debug issue: reproduce or get concrete X11/window evidence before hypothesizing.
 
 3. **Edit carefully**

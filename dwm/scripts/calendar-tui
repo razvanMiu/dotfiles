@@ -1,0 +1,209 @@
+#!/usr/bin/env python3
+
+import calendar
+import curses
+import datetime as dt
+import os
+from pathlib import Path
+
+CACHE = Path(os.environ.get("XDG_CACHE_HOME", str(Path.home() / ".cache"))) / "dwm" / "calendar-agenda"
+
+MACCHIATO = {
+    "base": 0x24273A,
+    "surface0": 0x363A4F,
+    "text": 0xCAD3F5,
+    "subtext": 0xA5ADCB,
+    "mauve": 0xC6A0F6,
+    "peach": 0xF5A97F,
+    "green": 0xA6DA95,
+    "red": 0xED8796,
+}
+
+
+def load_events():
+    events = {}
+    if not CACHE.exists():
+        return events
+    for line in CACHE.read_text(errors="replace").splitlines():
+        if not line or line.startswith("#"):
+            continue
+        parts = (line.split("|", 5) + [""] * 6)[:6]
+        date, start, end, provider, title, location = parts
+        try:
+            dt.date.fromisoformat(date)
+        except ValueError:
+            continue
+        events.setdefault(date, []).append((start, end, provider, title, location))
+    return events
+
+
+def color_to_curses(value):
+    r = (value >> 16) & 0xFF
+    g = (value >> 8) & 0xFF
+    b = value & 0xFF
+    return int(r / 255 * 1000), int(g / 255 * 1000), int(b / 255 * 1000)
+
+
+def init_colors():
+    curses.start_color()
+    curses.use_default_colors()
+    if curses.can_change_color() and curses.COLORS >= 16:
+        for idx, value in enumerate(MACCHIATO.values(), start=8):
+            curses.init_color(idx, *color_to_curses(value))
+        c = {name: idx for idx, name in enumerate(MACCHIATO, start=8)}
+        curses.init_pair(1, c["text"], c["base"])
+        curses.init_pair(2, c["mauve"], c["base"])
+        curses.init_pair(3, c["base"], c["mauve"])
+        curses.init_pair(4, c["peach"], c["base"])
+        curses.init_pair(5, c["green"], c["base"])
+        curses.init_pair(6, c["subtext"], c["base"])
+    else:
+        curses.init_pair(1, curses.COLOR_WHITE, -1)
+        curses.init_pair(2, curses.COLOR_MAGENTA, -1)
+        curses.init_pair(3, curses.COLOR_BLACK, curses.COLOR_MAGENTA)
+        curses.init_pair(4, curses.COLOR_YELLOW, -1)
+        curses.init_pair(5, curses.COLOR_GREEN, -1)
+        curses.init_pair(6, curses.COLOR_CYAN, -1)
+
+
+def addstr(win, y, x, text, attr=0):
+    h, w = win.getmaxyx()
+    if 0 <= y < h and x < w:
+        win.addstr(y, max(0, x), text[: max(0, w - x - 1)], attr)
+
+
+def calendar_metrics(stdscr):
+    _, w = stdscr.getmaxyx()
+    start_y = 3
+    cell_w = 6
+    grid_w = cell_w * 7
+    start_x = max(0, (w - grid_w) // 2)
+    return start_y, start_x, cell_w
+
+
+def date_at(stdscr, selected, x, y):
+    start_y, start_x, cell_w = calendar_metrics(stdscr)
+    row = y - start_y - 1
+    col = (x - start_x) // cell_w
+    if row < 0 or row > 5 or col < 0 or col > 6:
+        return None
+    month = calendar.Calendar(firstweekday=0).monthdatescalendar(selected.year, selected.month)
+    if row >= len(month):
+        return None
+    return month[row][col]
+
+
+def draw(stdscr, selected, events, event_offset):
+    stdscr.erase()
+    today = dt.date.today()
+    h, w = stdscr.getmaxyx()
+    title = selected.strftime("%B %Y")
+    addstr(stdscr, 1, max(0, (w - len(title)) // 2), title, curses.color_pair(2) | curses.A_BOLD)
+    start_y, start_x, cell_w = calendar_metrics(stdscr)
+    help_text = "click day  wheel events  h/l day  j/k week  H/L month  t today  q quit"
+    addstr(stdscr, h - 2, start_x, help_text, curses.color_pair(6))
+
+    cal = calendar.Calendar(firstweekday=0)
+    for i, name in enumerate(["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"]):
+        addstr(stdscr, start_y, start_x + i * cell_w + 2, name, curses.color_pair(6) | curses.A_BOLD)
+    for row, week in enumerate(cal.monthdatescalendar(selected.year, selected.month), start=1):
+        for col, day in enumerate(week):
+            x = start_x + col * cell_w
+            y = start_y + row
+            has_events = day.isoformat() in events
+            day_attr = curses.color_pair(1)
+            dot_attr = curses.color_pair(5) | curses.A_BOLD
+            if day.month != selected.month:
+                day_attr = curses.color_pair(6)
+            if day == today:
+                day_attr = curses.color_pair(4) | curses.A_BOLD | curses.A_UNDERLINE
+            if day == selected:
+                # Common calendar convention: selected day gets the filled accent,
+                # today gets an outline/underline when not selected. In a terminal
+                # this is the least-bad approximation of a circular selected chip.
+                day_attr = curses.color_pair(3) | curses.A_BOLD
+            addstr(stdscr, y, x + 2, f"{day.day:02d}", day_attr)
+            if has_events:
+                addstr(stdscr, y, x + 4, "•", dot_attr)
+
+    event_y = start_y + 9
+    event_title = f"Events — {selected.strftime('%a %d %b')}"
+    addstr(stdscr, event_y, start_x, event_title, curses.color_pair(2) | curses.A_BOLD)
+    day_events = sorted(events.get(selected.isoformat(), []), key=lambda e: e[0])
+    visible_events = max(1, h - event_y - 5)
+    event_offset = min(event_offset, max(0, len(day_events) - visible_events))
+    if not day_events:
+        addstr(stdscr, event_y + 2, start_x, "No events", curses.color_pair(6))
+    else:
+        if event_offset > 0:
+            addstr(stdscr, event_y + 1, start_x, "↑ more", curses.color_pair(6))
+        for i, (start, end, provider, title, location) in enumerate(day_events[event_offset:event_offset + visible_events]):
+            when = start + (f"-{end}" if end else "")
+            source = f"[{provider}] " if provider else ""
+            loc = f" @ {location}" if location else ""
+            addstr(stdscr, event_y + 2 + i, start_x, f"{when:11} {source}{title}{loc}", curses.color_pair(1))
+        if event_offset + visible_events < len(day_events):
+            addstr(stdscr, event_y + 2 + visible_events, start_x, "↓ more", curses.color_pair(6))
+    stdscr.refresh()
+    return event_offset
+
+
+def run(stdscr):
+    curses.curs_set(0)
+    stdscr.keypad(True)
+    curses.mousemask(curses.ALL_MOUSE_EVENTS | curses.REPORT_MOUSE_POSITION)
+    init_colors()
+    events = load_events()
+    selected = dt.date.today()
+    event_offset = 0
+    while True:
+        event_offset = draw(stdscr, selected, events, event_offset)
+        key = stdscr.getch()
+        if key in (ord("q"), 27):
+            return
+        if key == curses.KEY_MOUSE:
+            try:
+                _, x, y, _, state = curses.getmouse()
+            except curses.error:
+                continue
+            if state & (curses.BUTTON1_CLICKED | curses.BUTTON1_PRESSED):
+                clicked = date_at(stdscr, selected, x, y)
+                if clicked:
+                    selected = clicked
+                    event_offset = 0
+            elif hasattr(curses, "BUTTON4_PRESSED") and state & curses.BUTTON4_PRESSED:
+                event_offset = max(0, event_offset - 1)
+            elif hasattr(curses, "BUTTON5_PRESSED") and state & curses.BUTTON5_PRESSED:
+                event_offset += 1
+            continue
+        if key in (ord("h"), curses.KEY_LEFT):
+            selected -= dt.timedelta(days=1)
+            event_offset = 0
+        elif key in (ord("l"), curses.KEY_RIGHT):
+            selected += dt.timedelta(days=1)
+            event_offset = 0
+        elif key in (ord("j"), curses.KEY_DOWN):
+            selected += dt.timedelta(days=7)
+            event_offset = 0
+        elif key in (ord("k"), curses.KEY_UP):
+            selected -= dt.timedelta(days=7)
+            event_offset = 0
+        elif key == ord("H") or key == curses.KEY_PPAGE:
+            month = selected.month - 1 or 12
+            year = selected.year - (1 if selected.month == 1 else 0)
+            day = min(selected.day, calendar.monthrange(year, month)[1])
+            selected = dt.date(year, month, day)
+            event_offset = 0
+        elif key == ord("L") or key == curses.KEY_NPAGE:
+            month = selected.month + 1 if selected.month < 12 else 1
+            year = selected.year + (1 if selected.month == 12 else 0)
+            day = min(selected.day, calendar.monthrange(year, month)[1])
+            selected = dt.date(year, month, day)
+            event_offset = 0
+        elif key == ord("t"):
+            selected = dt.date.today()
+            event_offset = 0
+
+
+if __name__ == "__main__":
+    curses.wrapper(run)

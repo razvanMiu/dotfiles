@@ -3,7 +3,7 @@
 ## Files Retrieved
 1. `/home/razvan/.config/dwm/config.h` (lines 3-110) - active dwm appearance, tags/rules/layouts, launcher/dropdown commands, key/button bindings.
 2. `/home/razvan/.config/dwm/dwm.c` (lines 49-55, 69-145, 177-200, 236-297, 1104, 1688-1723, 1771-1788, 2038-2054) - confirms local patch hooks, dropdown client state, status mechanism, protected operations.
-3. `/home/razvan/.config/dwm/dropdown.c` (lines 1-149) - native dropdown implementation and behavior.
+3. `/home/razvan/.config/dwm/features/dropdown.c` - native dropdown implementation and behavior.
 4. `/home/razvan/.config/dwm/startdwm.sh` (lines 1-18) - session startup/autostart-equivalent commands and dwm restart loop.
 5. `/home/razvan/.config/X11/xinitrc` (lines 1-36) - X session entry point used by display manager and startx path.
 6. `/home/razvan/.config/dwm/dwm.desktop` (lines 1-8) - XSession desktop file points to X11 xinitrc.
@@ -44,8 +44,8 @@ static const char *droptermcmd[] = { "kitty", "--class", "dropdown-terminal", NU
 - Mod+grave toggles dropdown kitty; Mod+n toggles test dropdown.
 
 Patches/local changes already present:
-- Native dropdown patch: `Client.dropdown`, `Rule.dropdown`, `Monitor.dropw/droph`, `MAXDROPDOWNS`, declarations in `dwm.c:49-55, 69-145, 177-200, 236`, and `#include "dropdown.c"` at `dwm.c:297`.
-- Dropdown behavior in `dropdown.c:1-149`: sticky while visible via `TAGMASK`, hidden by setting `tags=0`, remembers per-monitor size during current dwm runtime, moves to selected monitor, raises above normal windows, prevents duplicate spawn for 2s.
+- Native dropdown patch: `Client.dropdown`, `Rule.dropdown`, `Monitor.dropw/droph`, `MAXDROPDOWNS`, declarations in `dwm.c`, and `#include "features/dropdown.c"`.
+- Dropdown behavior in `features/dropdown.c`: sticky while visible via `TAGMASK`, hidden by setting `tags=0`, remembers per-monitor size during current dwm runtime, moves to selected monitor, raises above normal windows, prevents duplicate spawn for 2s.
 - Focus-follows-mouse `enternotify` is commented out in `dwm.c:781-798`; focus is click/keyboard driven.
 - EWMH `_NET_CLIENT_LIST` support is present (`NetClientList` atom in `dwm.c:65-68` and setup/update hooks elsewhere).
 - No systray, alpha, gaps, vanity layouts, pertag, swallow, xresources, autostart patch, or statuscmd patch found in searched code.
@@ -79,7 +79,7 @@ Dwm visuals are compile-time config in `config.h`; changing colors/fonts/layouts
 
 ## Start Here
 
-Open `/home/razvan/.config/dwm/config.h` first. It contains the active user-facing visual choices and commands; then inspect `startdwm.sh` for low-risk startup additions (wallpaper/status/compositor) and `dropdown.c` only if touching dropdown behavior.
+Open `/home/razvan/.config/dwm/config.h` first. It contains the active user-facing visual choices and commands; then inspect `startdwm.sh` for low-risk startup additions and `features/dropdown.c` or `features/status.c` only if touching native feature behavior.
 
 ## Local implications and low-risk improvement candidates
 

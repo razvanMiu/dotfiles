@@ -22,9 +22,9 @@ static const char *tags[] = { "1", "2", "3", "4", "5", "6", "7", "8", "9" };
 static const Rule rules[] = {
 	/* class                 instance    title       tags mask       isfloating      dropdown       monitor */
 	{ "Brave-browser",       NULL,       NULL,       1 << 8,         0,              -1,            -1 },
-	{ "zed",                 NULL,       NULL,       1 << 0,         0,              -1,            -1 },
 	{ "dropdown-terminal",   NULL,       NULL,       0,              1,              0,             -1 },
-	{ "dropdown-test",       NULL,       NULL,       0,              1,              1,             -1 },
+	{ "dropdown-notes",      NULL,       NULL,       0,              1,              1,             -1 },
+	{ "dropdown-widgets",    NULL,       NULL,       0,              1,              2,             -1 },
 };
 
 /* layout(s) */
@@ -56,14 +56,36 @@ static const Layout layouts[] = {
 /* commands */
 static char dmenumon[2] = "0";  /* component of dmenucmd, manipulated in spawn() */
 static const char *dmenucmd[] = XDG_CONFIG_CMD("rofi/scripts/launcher");
-static const char *droptermcmd[] = { "kitty", "--class", "dropdown-terminal", NULL };
-static const char *droptestcmd[] = { "kitty", "--class", "dropdown-test", "--title", "dropdown-test", NULL };
+static const char *statusclickcmd[] = XDG_CONFIG_CMD("dwm/scripts/status-click");
 
+static const StatusSegment statussegments[] = {
+	/* name       function        argument */
+	{ "cpu",     NULL,           {0} },
+	{ "gpu",     NULL,           {0} },
+	{ "ram",     NULL,           {0} },
+	{ "volume",  toggleaudiowidget, {0} },
+	{ "time",    togglecalendarwidget, {0} },
+};
+static const char *droptermcmd[] = { "kitty", "--class", "dropdown-terminal", NULL };
+static const char *dropnotescmd[] = {
+	"/bin/sh", "-c",
+	"exec kitty --class dropdown-notes --title dropdown-notes nvim \"${XDG_DOCUMENTS_DIR:-$HOME/Documents}/notes/inbox.md\"",
+	NULL
+};
+static const char *dropwidgetcmd[] = {
+	"kitty", "--class", "dropdown-widgets", "--title", "dropdown-widgets",
+	"--override", "remember_window_size=no",
+	"--override", "initial_window_width=74c",
+	"--override", "initial_window_height=32c",
+	"dwm-widgets",
+	NULL
+};
 /* Dropdowns commands */
 static const Dropdown dropdowns[] = {
-	/* command       width factor  height factor */
-	{ droptermcmd,   1.0,          0.5 },
-	{ droptestcmd,   0.8,          0.35 },
+	/* command          width         height         x alignment */
+	{ droptermcmd,      1.0,          0.5,           0.0 },
+	{ dropnotescmd,     1.0,          0.5,           0.0 },
+	{ dropwidgetcmd,    0.0,          0.0,           1.0 },
 };
 
 static const Key keys[] = {
@@ -76,8 +98,8 @@ static const Key keys[] = {
 	{ MODKEY,                       XK_k,      focusstack,     {.i = -1 } },
 	{ MODKEY,                       XK_i,      incnmaster,     {.i = +1 } },
 	{ MODKEY,                       XK_d,      incnmaster,     {.i = -1 } },
-	{ MODKEY,                       XK_h,      setmfact,       {.f = -0.05} },
-	{ MODKEY,                       XK_l,      setmfact,       {.f = +0.05} },
+	{ MODKEY,                       XK_h,      dropdownsetmfact,{.f = -0.05} },
+	{ MODKEY,                       XK_l,      dropdownsetmfact,{.f = +0.05} },
 	{ MODKEY,                       XK_Return, zoom,           {0} },
 	{ MODKEY,                       XK_Tab,    view,           {0} },
 	{ MODKEY,                       XK_q,      killclient,     {0} },

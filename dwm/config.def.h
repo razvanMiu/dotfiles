@@ -61,8 +61,8 @@ static const char *dmenucmd[] = { "dmenu_run", "-m", dmenumon, "-fn", dmenufont,
 static const char *termcmd[]  = { "st", NULL };
 
 static const Dropdown dropdowns[] = {
-	/* command     width factor  height factor */
-	{ termcmd,     1.0,          0.5 },
+	/* command     width         height         x alignment */
+	{ termcmd,     1.0,          0.5,           0.0 },
 };
 
 static const Key keys[] = {

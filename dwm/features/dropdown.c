@@ -1,3 +1,7 @@
+#ifndef DWM_CONTEXT
+#define DWM_CONTEXT
+#include "../dwm.c"
+#else
 static time_t dropdownpending[MAXDROPDOWNS];
 
 static Client *
@@ -60,7 +64,7 @@ static void
 placedropdown(Client *c)
 {
 	Monitor *m;
-	int dropdown, maxw, maxh, defaultw, defaulth;
+	int dropdown, maxw, maxh, defaultw, defaulth, w, h, x;
 
 	if (!c || !ISDROPDOWN(c) || !(m = c->mon) || c->dropdown >= (int)LENGTH(dropdowns))
 		return;
@@ -68,13 +72,21 @@ placedropdown(Client *c)
 	dropdown = c->dropdown;
 	maxw = MAX(1, m->ww - 2 * c->bw);
 	maxh = MAX(1, m->wh - 2 * c->bw);
-	defaultw = MAX(1, (int)(maxw * (dropdowns[dropdown].wfact > 0 ? dropdowns[dropdown].wfact : 1.0)));
-	defaulth = MAX(1, (int)(maxh * (dropdowns[dropdown].hfact > 0 ? dropdowns[dropdown].hfact : 0.5)));
+	defaultw = dropdowns[dropdown].wfact == 0.0
+		? c->w
+		: dropdowns[dropdown].wfact > 1.0
+			? (int)dropdowns[dropdown].wfact
+			: MAX(1, (int)(maxw * (dropdowns[dropdown].wfact > 0 ? dropdowns[dropdown].wfact : 1.0)));
+	defaulth = dropdowns[dropdown].hfact == 0.0
+		? c->h
+		: dropdowns[dropdown].hfact > 1.0
+			? (int)dropdowns[dropdown].hfact
+			: MAX(1, (int)(maxh * (dropdowns[dropdown].hfact > 0 ? dropdowns[dropdown].hfact : 0.5)));
+	w = MIN((m->dropw[dropdown] && dropdowns[dropdown].wfact != 0.0) ? m->dropw[dropdown] : defaultw, maxw);
+	h = MIN((m->droph[dropdown] && dropdowns[dropdown].hfact != 0.0) ? m->droph[dropdown] : defaulth, maxh);
+	x = m->wx + (int)((maxw - w) * dropdowns[dropdown].xfact);
 	c->isfloating = 1;
-	resize(c, m->wx, m->wy,
-	       MIN(m->dropw[dropdown] ? m->dropw[dropdown] : defaultw, maxw),
-	       MIN(m->droph[dropdown] ? m->droph[dropdown] : defaulth, maxh),
-	       0);
+	resize(c, x, m->wy, w, h, 0);
 }
 
 static void hidevisibledropdowns(int except);
@@ -142,6 +154,49 @@ showdropdown(Client *c)
 }
 
 static void
+showdropdownid(int dropdown)
+{
+	Client *c;
+	Arg arg;
+
+	arg.i = dropdown;
+	if ((c = finddropdown(dropdown)))
+		showdropdown(c);
+	else
+		toggledropdown(&arg);
+}
+
+static void
+setwidgettab(const char *tab)
+{
+	char cmd[256];
+	const char *home;
+
+	home = getenv("HOME");
+	if (home && *home)
+		snprintf(cmd, sizeof cmd, "%s/.local/bin/dwm-widgetctl %s", home, tab);
+	else
+		snprintf(cmd, sizeof cmd, "dwm-widgetctl %s", tab);
+	(void)system(cmd);
+}
+
+static void
+togglecalendarwidget(const Arg *arg)
+{
+	(void)arg;
+	setwidgettab("calendar");
+	showdropdownid(2);
+}
+
+static void
+toggleaudiowidget(const Arg *arg)
+{
+	(void)arg;
+	setwidgettab("audio");
+	showdropdownid(2);
+}
+
+static void
 hidedropdown(Client *c, int refocus)
 {
 	if (!c)
@@ -193,6 +248,34 @@ raisedropdown(Monitor *m)
 }
 
 static void
+dropdownsetmfact(const Arg *arg)
+{
+	Client *c;
+	Monitor *m;
+	int dropdown, maxh, delta;
+
+	c = selmon ? selmon->sel : NULL;
+	if (!ISDROPDOWN(c) || !ISVISIBLE(c)) {
+		setmfact(arg);
+		return;
+	}
+
+	m = c->mon;
+	dropdown = c->dropdown;
+	maxh = MAX(1, m->wh - 2 * c->bw);
+	delta = arg->f ? (int)(m->wh * arg->f) : arg->i;
+	if (!delta)
+		delta = arg->f > 0 ? 1 : -1;
+
+	m->dropw[dropdown] = c->w;
+	m->droph[dropdown] = MAX(1, MIN(c->h + delta, maxh));
+	placedropdown(c);
+	arrange(m);
+	focus(c);
+	XRaiseWindow(dpy, c->win);
+}
+
+static void
 toggledropdown(const Arg *arg)
 {
 	Client *c;
@@ -204,9 +287,12 @@ toggledropdown(const Arg *arg)
 	if (dropdownpending[dropdown] && time(NULL) - dropdownpending[dropdown] < 2)
 		return;
 	if ((c = finddropdown(dropdown))) {
-		if (dropdownvisibleon(c, selmon))
-			hidedropdown(c, 1);
-		else
+		if (dropdownvisibleon(c, selmon)) {
+			if (selmon->sel == c)
+				hidedropdown(c, 1);
+			else
+				showdropdown(c);
+		} else
 			showdropdown(c);
 	} else {
 		hidevisibledropdowns(dropdown);
@@ -215,3 +301,5 @@ toggledropdown(const Arg *arg)
 		spawn(&spawnarg);
 	}
 }
+
+#endif /* DWM_CONTEXT */
