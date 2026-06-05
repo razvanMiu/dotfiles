@@ -17,15 +17,7 @@ status-restart: ${USER_BIN}/dwm-status
 	mkdir -p $${XDG_STATE_HOME:-$${HOME}/.local/state}/dwm
 	${USER_BIN}/dwm-status > $${XDG_STATE_HOME:-$${HOME}/.local/state}/dwm/status.log 2>&1 & echo $$! > $${XDG_STATE_HOME:-$${HOME}/.local/state}/dwm/status.pid
 
-tuis: ${USER_BIN}/dwm-calendar ${USER_BIN}/dwm-audio ${USER_BIN}/dwm-widgets ${USER_BIN}/dwm-widgetctl ${USER_BIN}/dwm-status
-
-${USER_BIN}/dwm-calendar: FORCE widgets/calendar/main.go widgets/calendar/go.mod widgets/calendar/go.sum
-	mkdir -p ${USER_BIN}
-	cd widgets/calendar && ${GO} build -o $@ .
-
-${USER_BIN}/dwm-audio: FORCE widgets/audio/main.go widgets/audio/go.mod widgets/audio/go.sum
-	mkdir -p ${USER_BIN}
-	cd widgets/audio && ${GO} build -o $@ .
+tuis: ${USER_BIN}/dwm-widgets ${USER_BIN}/dwm-widgetctl ${USER_BIN}/dwm-status
 
 ${USER_BIN}/dwm-widgets: FORCE widgets/panel/main.go widgets/panel/go.mod widgets/panel/go.sum
 	mkdir -p ${USER_BIN}

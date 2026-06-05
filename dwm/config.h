@@ -63,8 +63,8 @@ static const StatusSegment statussegments[] = {
 	{ "cpu",     NULL,           {0} },
 	{ "gpu",     NULL,           {0} },
 	{ "ram",     NULL,           {0} },
-	{ "volume",  toggleaudiowidget, {0} },
-	{ "time",    togglecalendarwidget, {0} },
+	{ "volume",  togglewidget,   {.v = "2 audio 80 32"} },
+	{ "time",    togglewidget,   {.v = "2 calendar 48 30"} },
 };
 static const char *droptermcmd[] = { "kitty", "--class", "dropdown-terminal", NULL };
 static const char *dropnotescmd[] = {
@@ -73,11 +73,12 @@ static const char *dropnotescmd[] = {
 	NULL
 };
 static const char *dropwidgetcmd[] = {
-	"kitty", "--class", "dropdown-widgets", "--title", "dropdown-widgets",
-	"--override", "remember_window_size=no",
-	"--override", "initial_window_width=74c",
-	"--override", "initial_window_height=32c",
-	"dwm-widgets",
+	"/bin/sh", "-c",
+	"tab=$(cat \"${XDG_STATE_HOME:-$HOME/.local/state}/dwm/last-widget-tab\" 2>/dev/null || printf calendar); "
+	"width=48c; height=30c; [ \"$tab\" = audio ] && width=80c && height=32c; "
+	"exec kitty --class dropdown-widgets --title dropdown-widgets "
+	"--override remember_window_size=no --override initial_window_width=$width "
+	"--override initial_window_height=$height dwm-widgets",
 	NULL
 };
 /* Dropdowns commands */

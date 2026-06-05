@@ -3,6 +3,8 @@
 #include "../dwm.c"
 #else
 static time_t dropdownpending[MAXDROPDOWNS];
+static int widgetcols[MAXDROPDOWNS];
+static int widgetrows[MAXDROPDOWNS];
 
 static Client *
 finddropdown(int dropdown)
@@ -61,6 +63,30 @@ storedropdownsize(Client *c)
 }
 
 static void
+resizewidgetdropdown(Client *c)
+{
+	int cols, rows, w, h, maxw, maxh;
+
+	if (!c || !ISDROPDOWN(c) || c->dropdown >= MAXDROPDOWNS)
+		return;
+	cols = widgetcols[c->dropdown];
+	rows = widgetrows[c->dropdown];
+	if (cols <= 0 && rows <= 0)
+		return;
+	updatesizehints(c);
+	maxw = MAX(1, c->mon->ww - 2 * c->bw);
+	maxh = MAX(1, c->mon->wh - 2 * c->bw);
+	w = c->w;
+	h = c->h;
+	if (cols > 0 && c->incw > 0)
+		w = c->basew + cols * c->incw;
+	if (rows > 0 && c->inch > 0)
+		h = c->baseh + rows * c->inch;
+	c->w = MIN(w, maxw);
+	c->h = MIN(h, maxh);
+}
+
+static void
 placedropdown(Client *c)
 {
 	Monitor *m;
@@ -101,6 +127,7 @@ managedropdown(Client *c)
 	c->mon = selmon;
 	c->tags = TAGMASK;
 	c->isfloating = 1;
+	resizewidgetdropdown(c);
 	placedropdown(c);
 }
 
@@ -147,6 +174,7 @@ showdropdown(Client *c)
 	movedropdown(c, selmon);
 	c->tags = TAGMASK;
 	c->isfloating = 1;
+	resizewidgetdropdown(c);
 	placedropdown(c);
 	arrange(c->mon);
 	focus(c);
@@ -181,19 +209,20 @@ setwidgettab(const char *tab)
 }
 
 static void
-togglecalendarwidget(const Arg *arg)
+togglewidget(const Arg *arg)
 {
-	(void)arg;
-	setwidgettab("calendar");
-	showdropdownid(2);
-}
+	char tab[32];
+	int cols, dropdown, rows;
 
-static void
-toggleaudiowidget(const Arg *arg)
-{
-	(void)arg;
-	setwidgettab("audio");
-	showdropdownid(2);
+	cols = rows = 0;
+	if (!arg->v || sscanf(arg->v, "%d %31s %d %d", &dropdown, tab, &cols, &rows) < 2)
+		return;
+	if (dropdown >= 0 && dropdown < MAXDROPDOWNS) {
+		widgetcols[dropdown] = cols;
+		widgetrows[dropdown] = rows;
+	}
+	setwidgettab(tab);
+	showdropdownid(dropdown);
 }
 
 static void

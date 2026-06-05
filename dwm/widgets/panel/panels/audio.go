@@ -1,4 +1,4 @@
-package main
+package panels
 
 import (
 	"encoding/json"
@@ -7,16 +7,13 @@ import (
 	"os/exec"
 	"sort"
 	"strings"
-	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
 )
 
 type volumeMap map[string]struct {
 	ValuePercent string `json:"value_percent"`
 }
-
 type device struct {
 	Index             int `json:"index"`
 	Name, Description string
@@ -33,64 +30,25 @@ type info struct {
 	DefaultSinkName   string `json:"default_sink_name"`
 	DefaultSourceName string `json:"default_source_name"`
 }
-type state struct {
+type audioState struct {
 	Info                  info
 	Sinks, Sources        []device
 	Inputs, SourceOutputs []stream
 }
-type tickMsg struct{}
-
-type model struct {
-	st              state
+type Audio struct {
+	st              audioState
 	section, cursor int
 	width, height   int
 	err             string
 }
 
-const (
-	base     = "#24273a"
-	surface0 = "#363a4f"
-	text     = "#cad3f5"
-	subtext  = "#a5adcb"
-	mauve    = "#c6a0f6"
-	green    = "#a6da95"
-	red      = "#ed8796"
-	yellow   = "#eed49f"
-)
-
-var (
-	page  = lipgloss.NewStyle().Background(lipgloss.Color(base)).Foreground(lipgloss.Color(text)).Padding(1, 2)
-	title = lipgloss.NewStyle().Foreground(lipgloss.Color(mauve)).Bold(true)
-	muted = lipgloss.NewStyle().Foreground(lipgloss.Color(subtext))
-	sel   = lipgloss.NewStyle().Foreground(lipgloss.Color(base)).Background(lipgloss.Color(mauve))
-	ok    = lipgloss.NewStyle().Foreground(lipgloss.Color(green))
-	warn  = lipgloss.NewStyle().Foreground(lipgloss.Color(yellow))
-	bad   = lipgloss.NewStyle().Foreground(lipgloss.Color(red))
-)
-
-func main() {
-	m := model{}
-	m.refresh()
-	p := tea.NewProgram(m, tea.WithAltScreen())
-	if _, err := p.Run(); err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		os.Exit(1)
-	}
-}
-func (m model) Init() tea.Cmd { return tick() }
-func tick() tea.Cmd           { return tea.Tick(2*time.Second, func(time.Time) tea.Msg { return tickMsg{} }) }
-func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	switch msg := msg.(type) {
-	case tickMsg:
-		m.refresh()
-		return m, tick()
-	case tea.WindowSizeMsg:
-		m.width = msg.Width
-		m.height = msg.Height
-	case tea.KeyMsg:
-		switch msg.String() {
-		case "q", "esc", "ctrl+c":
-			return m, tea.Quit
+func NewAudio() Audio                      { m := Audio{}; m.Refresh(); return m }
+func (m *Audio) SetSize(width, height int) { m.width, m.height = width, height }
+func (m Audio) WidthHint() int             { return 76 }
+func (m Audio) HeightHint() int            { return 32 }
+func (m *Audio) Update(msg tea.Msg) {
+	if k, ok := msg.(tea.KeyMsg); ok {
+		switch k.String() {
 		case "tab":
 			m.section = (m.section + 1) % 4
 			m.cursor = 0
@@ -110,55 +68,70 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "enter":
 			m.activate()
 		case "r":
-			m.refresh()
+			m.Refresh()
 		}
 	}
-	return m, nil
 }
-func (m model) View() string {
-	w := max(58, m.width-4)
-	var b strings.Builder
-	writeLine(&b, center(title.Render("Audio"), w))
-	writeLine(&b, center(muted.Render("Tab section · j/k row · h/l vol · m mute · Enter default · r/q"), w))
-	writeBlankLine(&b)
-	b.WriteString(m.renderSection(0, "Outputs", m.renderDevices(m.st.Sinks, m.st.Info.DefaultSinkName, true), w))
-	b.WriteString(m.renderSection(1, "Inputs", m.renderDevices(m.st.Sources, m.st.Info.DefaultSourceName, false), w))
-	b.WriteString(m.renderSection(2, "Apps", m.renderStreams(m.st.Inputs), w))
-	b.WriteString(m.renderSection(3, "Recording", m.renderStreams(m.st.SourceOutputs), w))
-	if m.err != "" {
-		writeBlankLine(&b)
-		b.WriteString(bad.Render(m.err))
+func (m Audio) View(w, h int) string {
+	lines := []string{
+		center(title.Render("Audio"), w),
+		center(muted.Render("Tab section · j/k row · h/l vol · m mute · Enter default · r/q"), w),
+		"",
 	}
-	return page.Width(w).Render(b.String())
+	sections := []struct {
+		index int
+		name  string
+		lines []string
+	}{
+		{0, "Outputs", m.renderDevices(m.st.Sinks, m.st.Info.DefaultSinkName, true)},
+		{1, "Inputs", m.renderDevices(m.st.Sources, m.st.Info.DefaultSourceName, false)},
+		{2, "Apps", m.renderStreams(m.st.Inputs)},
+		{3, "Recording", m.renderStreams(m.st.SourceOutputs)},
+	}
+	remaining := max(0, h-len(lines))
+	for i, section := range sections {
+		sectionsLeft := len(sections) - i
+		budget := max(1, remaining-sectionsLeft+1)
+		rendered := m.renderSection(section.index, section.name, section.lines, budget)
+		lines = append(lines, rendered...)
+		remaining = max(0, h-len(lines))
+	}
+	if m.err != "" && len(lines) < h {
+		lines = append(lines, bad.Render(m.err))
+	}
+	return fitLines(lines, w, h)
 }
-func (m model) renderSection(i int, name string, lines []string, w int) string {
-	head := name
+func (m Audio) renderSection(i int, name string, rows []string, budget int) []string {
+	head := "  " + name
 	if m.section == i {
-		head = "▶ " + head
-	} else {
-		head = "  " + head
+		head = "▶ " + name
 	}
-	var b strings.Builder
-	b.WriteString(title.Render(head))
-	b.WriteString(muted.Render(fmt.Sprintf("  %d", len(lines))))
-	b.WriteByte('\n')
-	if len(lines) == 0 {
-		b.WriteString("  ")
-		writeLine(&b, muted.Render("No active streams"))
-		writeBlankLine(&b)
-		return b.String()
+	lines := []string{title.Render(head) + muted.Render(fmt.Sprintf("  %d", len(rows)))}
+	if budget <= 1 {
+		return lines
 	}
-	for n, l := range lines {
-		if m.section == i && m.cursor == n {
-			l = sel.Render(l)
+	if len(rows) == 0 {
+		return append(lines, "  "+muted.Render("No active streams"))
+	}
+	rowBudget := max(0, budget-1)
+	start := 0
+	if m.section == i && m.cursor >= rowBudget && rowBudget > 0 {
+		start = m.cursor - rowBudget + 1
+	}
+	end := min(len(rows), start+rowBudget)
+	for n, l := range rows[start:end] {
+		idx := start + n
+		if m.section == i && m.cursor == idx {
+			l = selected.Render(l)
 		}
-		b.WriteString("  ")
-		writeLine(&b, l)
+		lines = append(lines, "  "+l)
 	}
-	writeBlankLine(&b)
-	return b.String()
+	if end < len(rows) && len(lines) > 1 {
+		lines[len(lines)-1] = "  " + muted.Render("↓ more")
+	}
+	return lines
 }
-func (m model) renderDevices(ds []device, def string, output bool) []string {
+func (m Audio) renderDevices(ds []device, def string, output bool) []string {
 	var out []string
 	for _, d := range ds {
 		if !output && strings.Contains(d.Name, ".monitor") {
@@ -172,11 +145,12 @@ func (m model) renderDevices(ds []device, def string, output bool) []string {
 		if d.Mute {
 			mute = " " + bad.Render("muted")
 		}
-		out = append(out, fmt.Sprintf("%s %-30s %3d%% %s%s", mark, short(d.Description, 30), percent(d.Volume), bar(percent(d.Volume), 16), mute))
+		p := percent(d.Volume)
+		out = append(out, fmt.Sprintf("%s %-30s %3d%% %s%s", mark, short(d.Description, 30), p, bar(p, 16), mute))
 	}
 	return out
 }
-func (m model) renderStreams(ss []stream) []string {
+func (m Audio) renderStreams(ss []stream) []string {
 	var out []string
 	sort.Slice(ss, func(i, j int) bool { return appName(ss[i]) < appName(ss[j]) })
 	for _, s := range ss {
@@ -184,12 +158,13 @@ func (m model) renderStreams(ss []stream) []string {
 		if s.Mute {
 			mute = " " + bad.Render("muted")
 		}
-		out = append(out, fmt.Sprintf("%-32s %3d%% %s%s", short(appName(s), 32), percent(s.Volume), bar(percent(s.Volume), 16), mute))
+		p := percent(s.Volume)
+		out = append(out, fmt.Sprintf("%-32s %3d%% %s%s", short(appName(s), 32), p, bar(p, 16), mute))
 	}
 	return out
 }
-func (m *model) refresh() {
-	st, err := load()
+func (m *Audio) Refresh() {
+	st, err := loadAudio()
 	if err != nil {
 		m.err = err.Error()
 		return
@@ -200,8 +175,8 @@ func (m *model) refresh() {
 		m.cursor = max(0, m.sectionLen()-1)
 	}
 }
-func load() (state, error) {
-	var st state
+func loadAudio() (audioState, error) {
+	var st audioState
 	if err := jsonCmd(&st.Info, "pactl", "--format=json", "info"); err != nil {
 		return st, err
 	}
@@ -218,12 +193,12 @@ func jsonCmd(v any, name string, args ...string) error {
 	}
 	return json.Unmarshal(out, v)
 }
-func (m model) sectionLen() int {
+func (m Audio) sectionLen() int {
 	switch m.section {
 	case 0:
 		return len(m.renderDevices(m.st.Sinks, m.st.Info.DefaultSinkName, true))
 	case 1:
-		return len(m.renderDevices(m.st.Sources, m.st.Info.DefaultSourceName, false))
+		return len(filterSources(m.st.Sources))
 	case 2:
 		return len(m.st.Inputs)
 	case 3:
@@ -231,7 +206,7 @@ func (m model) sectionLen() int {
 	}
 	return 0
 }
-func (m model) selectedID() string {
+func (m Audio) selectedID() string {
 	switch m.section {
 	case 0:
 		if m.cursor < len(m.st.Sinks) {
@@ -253,7 +228,7 @@ func (m model) selectedID() string {
 	}
 	return ""
 }
-func (m *model) adjust(delta int) {
+func (m *Audio) adjust(delta int) {
 	id := m.selectedID()
 	if id == "" {
 		return
@@ -268,20 +243,20 @@ func (m *model) adjust(delta int) {
 	case 3:
 		exec.Command("pactl", "set-source-output-volume", id, fmt.Sprintf("%+d%%", delta)).Run()
 	}
-	m.refresh()
+	m.Refresh()
 	refreshStatusBar()
 }
-func (m *model) toggleMute() {
+func (m *Audio) toggleMute() {
 	id := m.selectedID()
 	if id == "" {
 		return
 	}
-	cmds := [][]string{{"set-sink-mute"}, {"set-source-mute"}, {"set-sink-input-mute"}, {"set-source-output-mute"}}
-	exec.Command("pactl", cmds[m.section][0], id, "toggle").Run()
-	m.refresh()
+	cmds := []string{"set-sink-mute", "set-source-mute", "set-sink-input-mute", "set-source-output-mute"}
+	exec.Command("pactl", cmds[m.section], id, "toggle").Run()
+	m.Refresh()
 	refreshStatusBar()
 }
-func (m *model) activate() {
+func (m *Audio) activate() {
 	id := m.selectedID()
 	if id == "" {
 		return
@@ -292,15 +267,13 @@ func (m *model) activate() {
 	if m.section == 1 {
 		exec.Command("pactl", "set-default-source", id).Run()
 	}
-	m.refresh()
+	m.Refresh()
 	refreshStatusBar()
 }
 func refreshStatusBar() {
-	cmd := dwmStatusPath()
-	if cmd == "" {
-		return
+	if cmd := dwmStatusPath(); cmd != "" {
+		exec.Command(cmd, "--refresh", "volume").Run()
 	}
-	exec.Command(cmd, "--refresh", "volume").Run()
 }
 func dwmStatusPath() string {
 	if home := os.Getenv("HOME"); home != "" {
@@ -342,21 +315,4 @@ func appName(s stream) string {
 		}
 	}
 	return fmt.Sprintf("stream %d", s.Index)
-}
-func short(s string, n int) string {
-	r := []rune(s)
-	if len(r) <= n {
-		return s
-	}
-	return string(r[:n-1]) + "…"
-}
-func center(s string, w int) string {
-	return lipgloss.NewStyle().Width(w).Align(lipgloss.Center).Render(s)
-}
-func writeLine(b *strings.Builder, s string) {
-	b.WriteString(s)
-	b.WriteByte('\n')
-}
-func writeBlankLine(b *strings.Builder) {
-	b.WriteByte('\n')
 }

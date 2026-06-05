@@ -7,6 +7,7 @@
  * .clangd force-includes this lightweight context for editor diagnostics only.
  */
 #include <stddef.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <time.h>
 #include <unistd.h>
@@ -99,3 +100,4 @@ void resize(Client *c, int x, int y, int w, int h, int interact);
 void setmfact(const Arg *arg);
 void spawn(const Arg *arg);
 void unfocus(Client *c, int setfocus);
+void updatesizehints(Client *c);
