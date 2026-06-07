@@ -20,4 +20,10 @@ git_custom_status() {
   fi
 }
 
-PROMPT='$(git_custom_status)%{$fg[cyan]%}[%~% ]%{$reset_color%}%B$%b '
+if [ -n "$TMUX" ]; then
+  # tmux already shows current directory and git branch in the status line.
+  # Keep the shell prompt minimal inside tmux to avoid repeating context.
+  PROMPT='%B$%b '
+else
+  PROMPT='$(git_custom_status)%{$fg[cyan]%}[%~% ]%{$reset_color%}%B$%b '
+fi

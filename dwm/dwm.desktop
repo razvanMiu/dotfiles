@@ -1,8 +1,6 @@
 [Desktop Entry]
-Encoding=UTF-8
 Name=Dwm
 Comment=Dynamic window manager
-Exec=sh -c "exec \\${XDG_CONFIG_HOME:-\\$HOME/.config}/X11/xinitrc"
+Exec=/bin/sh -c "exec \"\\${XDG_CONFIG_HOME:-\\$HOME/.config}/X11/xinitrc\""
 Icon=dwm
-Type=XSession
-DesktopNames=dwm
+Type=Application

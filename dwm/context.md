@@ -38,10 +38,14 @@ Tags/rules/layouts (`config.h:20-43`):
 Launcher/dropdowns (`config.h:55-69`):
 ```c
 static const char *dmenucmd[] = { "rofi", "-show", "drun", "-theme", "~/.config/rofi/themes/rounded-nord-dark.rasi", NULL };
-static const char *droptermcmd[] = { "kitty", "--class", "dropdown-terminal", NULL };
+static const char *droptermcmd[] = {
+	"st", "-c", "dropdown-terminal", "-n", "dropdown-terminal", "-T", "dropdown-terminal", "-A", "1.0",
+	"-e", "tmux", "new-session", "-A", "-s", "dropdown",
+	NULL
+};
 ```
-- Mod+Space runs rofi drun with `rounded-nord-dark.rasi` explicitly, not `~/.config/rofi/config.rasi`.
-- Mod+grave toggles dropdown kitty; Mod+n toggles test dropdown.
+- Mod+Space runs the XDG rofi launcher script.
+- Mod+grave toggles the dropdown st/tmux session; Mod+n toggles dropdown notes.
 
 Patches/local changes already present:
 - Native dropdown patch: `Client.dropdown`, `Rule.dropdown`, `Monitor.dropw/droph`, `MAXDROPDOWNS`, declarations in `dwm.c`, and `#include "features/dropdown.c"`.
@@ -85,7 +89,7 @@ Open `/home/razvan/.config/dwm/config.h` first. It contains the active user-faci
 
 - Align rofi theme with dwm: either change `dmenucmd` to a Catppuccin Mocha/Macchiato theme already present, or adjust `rounded-nord-dark.rasi`; current launcher is Nord while dwm is Catppuccin.
 - Add startup commands cautiously in `startdwm.sh` rather than implementing dwm autostart patch: e.g. guarded background launches for compositor/wallpaper/status once tools are installed.
-- If compositor is desired, install/configure picom first; no local picom config or binary was found. Keep it opt-in and avoid editing dwm for transparency until compositor availability is confirmed.
+- Picom is configured under `~/.config/picom/picom.conf`; dropdown st windows are launched opaque (`st -A 1.0`) and picom owns their translucency/blur via dropdown WM_CLASS rules.
 - If wallpaper is desired, choose one tool (`feh`/`xwallpaper`/etc.) and add a single command to `startdwm.sh`; no current wallpaper mechanism exists locally.
 - If a status bar is desired, add a simple root-name loop or `slstatus`/`dwmblocks` in startup; dwm already consumes `XA_WM_NAME`, so no dwm patch is needed for basic status.
 - Avoid overwriting dropdown semantics with a generic scratchpad patch; local code and docs intentionally implement custom native dropdown behavior.

@@ -5,8 +5,8 @@ This context defines the user-facing language for Razvan's personal dwm window-m
 ## Language
 
 **Dropdown terminal**:
-A single reusable Kitty terminal that can be toggled into view above the current workspace on the active monitor. While open, it remains visible across normal tag switches until explicitly hidden. Its manually resized dimensions are remembered separately per monitor.
-_Avoid_: tdrop terminal, quake terminal, scratchpad kitty
+A single reusable st terminal running a tmux session that can be toggled into view above the current workspace on the active monitor. While open, it remains visible across normal tag switches until explicitly hidden. Its manually resized dimensions are remembered separately per monitor. st stays internally opaque; picom owns dropdown translucency and blur through dropdown WM_CLASS rules.
+_Avoid_: tdrop terminal, quake terminal, scratchpad terminal
 
 **Scratchpad**:
 A persistent window that can be hidden and shown without being tied to one normal tag.
@@ -29,12 +29,12 @@ Focused C files under `features/` included by `dwm.c` after `config.h`. They kee
 _Avoid_: mixing feature implementation blocks into `dwm.c`, separate object build complexity
 
 **Dropdown notes**:
-A native dropdown Kitty window running Neovim against the notes inbox under `$XDG_DOCUMENTS_DIR/notes`, currently toggled with Mod+n.
+A native dropdown st window running Neovim against the notes inbox under `$XDG_DOCUMENTS_DIR/notes`, currently toggled with Mod+n.
 _Avoid_: dropdown-test, temporary test dropdown
 
 **Dropdown widgets**:
-A single persistent native dropdown Kitty window running the Catppuccin-styled Go widget panel. Status-bar segments switch it to focused tabs such as Calendar or Audio instead of spawning separate widget terminals.
-_Avoid_: one Kitty process per status widget, external overlay widget windows
+A single persistent native dropdown st window running the Catppuccin-styled Go widget panel. Status-bar segments switch it to focused tabs such as Calendar or Audio instead of spawning separate widget terminals.
+_Avoid_: one terminal process per status widget, external overlay widget windows
 
 **Calendar event cache**:
 A local provider-neutral cache of read-only calendar events used by the Calendar tab in the dropdown widget panel. It contains display-ready event fields such as title, provider, body, location, meeting URL, all-day flag, date, start, and end.

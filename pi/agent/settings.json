@@ -15,5 +15,6 @@
     "git:github.com/elpapi42/pi-fork",
     "npm:pi-mcp-adapter",
     "npm:pi-rtk-optimizer"
-  ]
+  ],
+  "hideThinkingBlock": true
 }

@@ -28,6 +28,8 @@
 !/picom/
 !/rofi/
 !/scripts/
+!/st/
+!/tmux/
 !/X11/
 !/xdg-desktop-portal/
 !/zed/

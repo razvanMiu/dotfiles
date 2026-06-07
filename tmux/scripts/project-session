@@ -1,0 +1,33 @@
+#!/bin/sh
+# Fuzzy-select a project directory and attach/switch to a tmux session for it.
+
+set -eu
+
+roots="${TMUX_PROJECT_ROOTS:-$HOME/.config $HOME/Work $HOME/Code $HOME/Projects $HOME/projects $HOME/src $HOME/work}"
+
+projects=$(
+  for root in $roots; do
+    [ -d "$root" ] || continue
+    find "$root" -mindepth 1 -maxdepth 4 \( -path '*/.git' -o -path '*/.jj' \) -type d -print 2>/dev/null \
+      | sed 's#/.git$##; s#/.jj$##'
+  done | awk '!seen[$0]++' | sort
+)
+
+[ -n "$projects" ] || { printf 'No projects found. Set TMUX_PROJECT_ROOTS or create repos under ~/.config, ~/Work, ~/Code, or ~/Projects.\n' >&2; exit 1; }
+
+selected=$(printf '%s\n' "$projects" | fzf --prompt='project> ' --height=80% --reverse --preview 'printf "{}\n\n"; git -C {} status --short --branch 2>/dev/null | head -80')
+[ -n "$selected" ] || exit 0
+
+base=$(basename "$selected")
+session=$(printf '%s' "$base" | tr '.:' '__' | tr -c '[:alnum:]_-' '_')
+
+if ! tmux has-session -t "$session" 2>/dev/null; then
+  tmux new-session -d -s "$session" -c "$selected"
+  tmux rename-window -t "$session:1" editor
+fi
+
+if [ -n "${TMUX:-}" ]; then
+  tmux switch-client -t "$session"
+else
+  tmux attach-session -t "$session"
+fi

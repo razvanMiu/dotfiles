@@ -1,6 +1,6 @@
 # Native dropdown terminal
 
-We will replace the external `tdrop`-managed Kitty dropdown with a dwm-native dropdown terminal because the desired behavior depends on dwm's own monitor work area, tag visibility, and stacking rules. Stock scratchpad patches and hidden scratchpad tags were considered, but the chosen behavior is more specific: a single sticky-while-open Kitty window that can be resized, remembers width/height per monitor while dwm is running, moves to the selected monitor when toggled there, and stays above other windows.
+We replaced the external `tdrop`-managed Kitty dropdown with a dwm-native dropdown terminal because the desired behavior depends on dwm's own monitor work area, tag visibility, and stacking rules. Stock scratchpad patches and hidden scratchpad tags were considered, but the chosen behavior is more specific: a single sticky-while-open st window running tmux that can be resized, remembers width/height per monitor while dwm is running, moves to the selected monitor when toggled there, and stays above other windows. st stays internally opaque for dropdowns; picom owns dropdown translucency and blur through dropdown WM_CLASS rules.
 
 ## Considered Options
 

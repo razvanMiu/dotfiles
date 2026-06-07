@@ -1,0 +1,43 @@
+#!/bin/sh
+# Fuzzy-filter captured scrollback. Copy selected non-empty line to tmux buffer
+# and the system clipboard.
+
+set -eu
+file=${1:?usage: find-scrollback captured-pane-file}
+
+line=$(fzf --prompt='scrollback> ' --height=80% --reverse < "$file") || exit 0
+
+# tmux captured lines can include right-padding from the terminal grid. Preserve
+# intentional leading indentation, but strip trailing whitespace before copy.
+line=$(printf '%s' "$line" | sed 's/[[:space:]]*$//')
+
+# Do not clear the clipboard if fzf returns an empty/blank line.
+if [ -z "$(printf '%s' "$line" | tr -d '[:space:]')" ]; then
+  tmux display-message 'No non-empty line selected; clipboard unchanged.' 2>/dev/null || true
+  exit 0
+fi
+
+tmp="${XDG_RUNTIME_DIR:-/tmp}/tmux-copy-line-$$"
+printf '%s\n' "$line" > "$tmp"
+
+# Always populate tmux's own buffer. -w also asks tmux to forward the buffer to
+# the terminal clipboard via OSC 52 when supported.
+tmux set-buffer -w -- "$line" 2>/dev/null || tmux load-buffer "$tmp" 2>/dev/null || true
+
+# Then set the X11/Wayland clipboard. Run detached so the clipboard owner is not
+# killed when the tmux popup closes.
+if command -v xclip >/dev/null 2>&1; then
+  setsid -f sh -c 'xclip -in -selection clipboard < "$1"' sh "$tmp" >/dev/null 2>&1 || true
+elif command -v xsel >/dev/null 2>&1; then
+  setsid -f sh -c 'xsel -ib < "$1"' sh "$tmp" >/dev/null 2>&1 || true
+elif command -v wl-copy >/dev/null 2>&1; then
+  setsid -f sh -c 'wl-copy < "$1"' sh "$tmp" >/dev/null 2>&1 || true
+else
+  tmux display-message 'Copied to tmux buffer only; no clipboard tool found.' 2>/dev/null || true
+  rm -f "$tmp"
+  exit 0
+fi
+
+# Give detached clipboard process time to open the redirected file.
+(sleep 1; rm -f "$tmp") >/dev/null 2>&1 &
+tmux display-message 'Copied selected scrollback line.' 2>/dev/null || true

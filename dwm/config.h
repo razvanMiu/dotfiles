@@ -57,6 +57,11 @@ static const Layout layouts[] = {
 static char dmenumon[2] = "0";  /* component of dmenucmd, manipulated in spawn() */
 static const char *dmenucmd[] = XDG_CONFIG_CMD("rofi/scripts/launcher");
 static const char *statusclickcmd[] = XDG_CONFIG_CMD("dwm/scripts/status-click");
+static const char *termcmd[] = {
+	"st", "-c", "st", "-n", "st", "-T", "tmux", "-A", "1.0",
+	"-e", "tmux", "new-session", "-A", "-s", "main",
+	NULL
+};
 
 static const StatusSegment statussegments[] = {
 	/* name       function        argument */
@@ -66,19 +71,20 @@ static const StatusSegment statussegments[] = {
 	{ "volume",  togglewidget,   {.v = "2 audio 80 32"} },
 	{ "time",    togglewidget,   {.v = "2 calendar 48 30"} },
 };
-static const char *droptermcmd[] = { "kitty", "--class", "dropdown-terminal", NULL };
+static const char *droptermcmd[] = {
+	"st", "-c", "dropdown-terminal", "-n", "dropdown-terminal", "-T", "dropdown-terminal", "-A", "1.0",
+	"-e", "tmux", "new-session", "-A", "-s", "dropdown",
+	NULL
+};
 static const char *dropnotescmd[] = {
 	"/bin/sh", "-c",
-	"exec kitty --class dropdown-notes --title dropdown-notes nvim \"${XDG_DOCUMENTS_DIR:-$HOME/Documents}/notes/inbox.md\"",
+	"exec st -c dropdown-notes -n dropdown-notes -T dropdown-notes -A 1.0 "
+	"-e nvim \"${XDG_DOCUMENTS_DIR:-$HOME/Documents}/notes/inbox.md\"",
 	NULL
 };
 static const char *dropwidgetcmd[] = {
-	"/bin/sh", "-c",
-	"tab=$(cat \"${XDG_STATE_HOME:-$HOME/.local/state}/dwm/last-widget-tab\" 2>/dev/null || printf calendar); "
-	"width=48c; height=30c; [ \"$tab\" = audio ] && width=80c && height=32c; "
-	"exec kitty --class dropdown-widgets --title dropdown-widgets "
-	"--override remember_window_size=no --override initial_window_width=$width "
-	"--override initial_window_height=$height dwm-widgets",
+	"st", "-c", "dropdown-widgets", "-n", "dropdown-widgets", "-T", "dropdown-widgets", "-A", "1.0",
+	"-e", "dwm-widgets",
 	NULL
 };
 /* Dropdowns commands */
@@ -102,6 +108,7 @@ static const Key keys[] = {
 	{ MODKEY,                       XK_h,      dropdownsetmfact,{.f = -0.05} },
 	{ MODKEY,                       XK_l,      dropdownsetmfact,{.f = +0.05} },
 	{ MODKEY,                       XK_Return, zoom,           {0} },
+	{ MODKEY|ShiftMask,             XK_Return, spawn,          {.v = termcmd } },
 	{ MODKEY,                       XK_Tab,    view,           {0} },
 	{ MODKEY,                       XK_q,      killclient,     {0} },
 	{ MODKEY,                       XK_t,      setlayout,      {.v = &layouts[0]} },

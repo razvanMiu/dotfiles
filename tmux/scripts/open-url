@@ -1,0 +1,13 @@
+#!/bin/sh
+# Pick a URL from a captured pane dump and open it with xdg-open.
+
+set -eu
+file=${1:?usage: open-url captured-pane-file}
+
+url=$(grep -Eo 'https?://[^[:space:]<>"'"'"'(){}|\\^`\[\]]+' "$file" \
+  | sed 's/[,.;:!?)]*$//' \
+  | awk '!seen[$0]++' \
+  | fzf --prompt='url> ' --height=80% --reverse --preview 'printf "%s\n" {}')
+
+[ -n "$url" ] || exit 0
+setsid -f xdg-open "$url" >/dev/null 2>&1 || xdg-open "$url" >/dev/null 2>&1 &

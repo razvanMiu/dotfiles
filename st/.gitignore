@@ -1,0 +1,4 @@
+# Generated suckless build artifacts
+/st
+/*.o
+/st-*.tar.gz
