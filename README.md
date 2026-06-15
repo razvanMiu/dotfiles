@@ -378,13 +378,34 @@ Current Obsidian AI knowledge vault:
 
 For this dotfiles repo, treat `graphify-out/` and `.graphify/` as generated local state. Keep them ignored and export only reviewed notes to the Obsidian vault. Other projects may choose to commit `graphify-out/` when team graph sharing is desired.
 
-Useful commands:
+The dotfiles corpus is constrained by:
+
+```text
+~/.config/.graphifyignore
+```
+
+That file excludes secrets, auth/session files, caches, browser profiles, package/vendor installs, Claude plugin checkouts, and generated Graphify output.
+
+Dotfiles Graphify workflow:
 
 ```sh
-graphify . --wiki
-graphify query "show the auth flow"
-graphify explain "RateLimiter"
-graphify path "A" "B"
+cd ~/.config
+# In Pi, prefer the Graphify skill / command so semantic extraction can use Pi-hosted agents.
+/graphify . --wiki --no-viz
+
+# Refresh Obsidian export after graph rebuilds or label changes.
+graphify export obsidian --dir ~/.local/share/obsidian/vaults/ai-knowledge/dotfiles-graph
+```
+
+After first generation, rename generic communities in `graphify-out/.graphify_labels.json`, then regenerate report/wiki/Obsidian export. Keep `graphify-out/` ignored.
+
+Useful query commands:
+
+```sh
+graphify query "how does the agent safety setup work?"
+graphify query "what connects Claude and Pi configuration?"
+graphify explain "scripts/check-dotfiles-safety"
+graphify path "claude-safety-hook" "check-dotfiles-safety"
 ```
 
 ### Current Pi settings
