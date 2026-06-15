@@ -351,9 +351,16 @@ context7 MCP  -> @upstash/context7-mcp@3.2.1
 serena MCP    -> git+https://github.com/oraios/serena@v1.5.3
 ```
 
-`context7` provides fresh library/API docs. `serena` provides semantic code navigation; Claude uses Serena's `claude-code` context while Pi uses Serena's generic `ide` context. Serena runs with `SERENA_HOME=${XDG_STATE_HOME:-$HOME/.local/state}/serena`; project-local `.serena/` data is generated, ignored, and blocked by the dotfiles safety guard if force-staged. Serena reminder hooks are not enabled for now because the existing Graphify and safety hooks already modify Claude tool behavior.
+`context7` provides fresh library/API docs. `serena` provides semantic code navigation; Claude uses Serena's `claude-code` context while Pi uses Serena's generic `ide` context. Serena runs with `SERENA_HOME=${XDG_STATE_HOME:-$HOME/.local/state}/serena`; project metadata is configured in Serena's own state file to live under `~/.local/state/serena/projects/<project>/.serena` rather than inside each worktree. Accidental project-local `.serena/` data is generated state, ignored, and blocked by the dotfiles safety guard if force-staged. Serena reminder hooks are not enabled for now because the existing Graphify and safety hooks already modify Claude tool behavior.
 
 Validation note: Context7 starts cleanly on stdio. Serena starts and exposes MCP tools. For the local `~/.config` project, generated `.serena/project.yml` is configured for TypeScript/JavaScript, Python, Go, C/C++, Bash, and Lua; the matching language-server commands are expected on `PATH`.
+
+MCP/tool routing rules:
+
+- Use Graphify first for project architecture, file relationships, cross-file navigation, and "where should I look?" questions when `graphify-out/graph.json` exists.
+- Use Serena for symbol-aware code navigation and safe semantic edits inside active code projects: symbol overview, find symbol, references, declarations, implementations, rename, and symbol-body replacement.
+- Use Context7 for fresh external library/API documentation before changing framework, package, or SDK usage.
+- Use Playwright for browser/UI validation, screenshots, accessibility snapshots, and interaction checks.
 
 Prefer standard shared MCP files such as `~/.config/mcp/mcp.json` only after deciding which servers should be cross-tool rather than Pi-specific.
 
