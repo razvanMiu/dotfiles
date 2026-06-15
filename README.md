@@ -402,11 +402,16 @@ After first generation, rename generic communities in `graphify-out/.graphify_la
 Useful query commands:
 
 ```sh
-graphify query "how does the agent safety setup work?"
-graphify query "what connects Claude and Pi configuration?"
+graphify query "Hard-boundary guard dotfiles safety guard"
+graphify query "scripts/check-dotfiles-safety"
+graphify query "scripts/claude-safety-hook"
+graphify query "Agent Config Boundaries"
+graphify query "Claude Code Adapter Canonical Cross-Agent Instructions"
 graphify explain "scripts/check-dotfiles-safety"
-graphify path "claude-safety-hook" "check-dotfiles-safety"
+graphify path "scripts/claude-safety-hook" "scripts/check-dotfiles-safety"
 ```
+
+Prefer exact domain terms, file names, and community labels over broad questions. See `docs/graphify/query-guide.md` for query patterns and known anchors.
 
 ### Current Pi settings
 
