@@ -353,7 +353,7 @@ serena MCP    -> git+https://github.com/oraios/serena@v1.5.3
 
 `context7` provides fresh library/API docs. `serena` provides semantic code navigation; Claude uses Serena's `claude-code` context while Pi uses Serena's generic `ide` context. Serena runs with `SERENA_HOME=${XDG_STATE_HOME:-$HOME/.local/state}/serena`; project-local `.serena/` data is generated, ignored, and blocked by the dotfiles safety guard if force-staged. Serena reminder hooks are not enabled for now because the existing Graphify and safety hooks already modify Claude tool behavior.
 
-Validation note: Context7 starts cleanly on stdio. Serena starts and exposes MCP tools, but symbolic language-server features require language servers for the active project. On this machine no relevant language server was found during setup, so Serena may need a follow-up language-server slice before it is useful for `~/.config`.
+Validation note: Context7 starts cleanly on stdio. Serena starts and exposes MCP tools. For the local `~/.config` project, generated `.serena/project.yml` is configured for TypeScript/JavaScript, Python, Go, C/C++, Bash, and Lua; the matching language-server commands are expected on `PATH`.
 
 Prefer standard shared MCP files such as `~/.config/mcp/mcp.json` only after deciding which servers should be cross-tool rather than Pi-specific.
 
