@@ -1,9 +1,10 @@
 # Graphify corpus rules for the dotfiles repo.
 # Unlike .gitignore, this file should describe what Graphify may inspect.
 
-# Generated graph output.
+# Generated local tool output.
 graphify-out/
 .graphify/
+.serena/
 
 # Secrets, auth, sessions, local env.
 .env

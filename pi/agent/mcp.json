@@ -5,7 +5,25 @@
   "mcpServers": {
     "playwright": {
       "command": "npx",
-      "args": ["@playwright/mcp@0.0.76", "--browser", "chromium"]
+      "args": [
+        "@playwright/mcp@0.0.76",
+        "--browser",
+        "chromium"
+      ]
+    },
+    "context7": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@upstash/context7-mcp@3.2.1"
+      ]
+    },
+    "serena": {
+      "command": "sh",
+      "args": [
+        "-lc",
+        "SERENA_HOME=\"${XDG_STATE_HOME:-$HOME/.local/state}/serena\" exec uvx --from git+https://github.com/oraios/serena@v1.5.3 serena start-mcp-server --context ide --project-from-cwd"
+      ]
     }
   }
 }
