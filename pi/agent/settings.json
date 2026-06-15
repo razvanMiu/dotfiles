@@ -15,7 +15,10 @@
     "git:github.com/elpapi42/pi-fork",
     "npm:pi-mcp-adapter",
     "npm:pi-rtk-optimizer",
-    "npm:graphify-pi"
+    {
+      "source": "npm:graphify-pi",
+      "skills": []
+    }
   ],
   "hideThinkingBlock": true
 }
