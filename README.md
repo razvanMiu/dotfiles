@@ -219,6 +219,7 @@ xdg-agent-canonical-v1
 See also:
 
 ```text
+~/.config/docs/agent-workflows.md
 ~/.config/docs/adr/0002-agent-configuration-boundaries.md
 ```
 
