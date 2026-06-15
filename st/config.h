@@ -319,24 +319,29 @@ static Key key[] = {
 	{ XK_Down,          XK_ANY_MOD,     "\033[B",        0,   -1},
 	{ XK_Down,          XK_ANY_MOD,     "\033OB",        0,   +1},
 	{ XK_Left,          ShiftMask,      "\033[1;2D",     0,    0},
-	{ XK_Left,          Mod1Mask,       "\033[1;3D",     0,    0},
-	{ XK_Left,       ShiftMask|Mod1Mask,"\033[1;4D",     0,    0},
-	{ XK_Left,          ControlMask,    "\033[1;5D",     0,    0},
+	{ XK_Left,          Mod1Mask,       "\033[D",        0,   -1}, /* Alt+Left: one char */
+	{ XK_Left,          Mod1Mask,       "\033OD",        0,   +1},
+	{ XK_Left,          Mod4Mask,       "\033b",         0,    0}, /* Opt+Left: one word */
+	{ XK_Left,          ControlMask,    "\001",          0,    0}, /* Ctrl+Left: start of line */
 	{ XK_Left,    ShiftMask|ControlMask,"\033[1;6D",     0,    0},
 	{ XK_Left,     ControlMask|Mod1Mask,"\033[1;7D",     0,    0},
 	{ XK_Left,ShiftMask|ControlMask|Mod1Mask,"\033[1;8D",0,    0},
 	{ XK_Left,          XK_ANY_MOD,     "\033[D",        0,   -1},
 	{ XK_Left,          XK_ANY_MOD,     "\033OD",        0,   +1},
 	{ XK_Right,         ShiftMask,      "\033[1;2C",     0,    0},
-	{ XK_Right,         Mod1Mask,       "\033[1;3C",     0,    0},
-	{ XK_Right,      ShiftMask|Mod1Mask,"\033[1;4C",     0,    0},
-	{ XK_Right,         ControlMask,    "\033[1;5C",     0,    0},
+	{ XK_Right,         Mod1Mask,       "\033[C",        0,   -1}, /* Alt+Right: one char */
+	{ XK_Right,         Mod1Mask,       "\033OC",        0,   +1},
+	{ XK_Right,         Mod4Mask,       "\033f",         0,    0}, /* Opt+Right: one word */
+	{ XK_Right,         ControlMask,    "\005",          0,    0}, /* Ctrl+Right: end of line */
 	{ XK_Right,   ShiftMask|ControlMask,"\033[1;6C",     0,    0},
 	{ XK_Right,    ControlMask|Mod1Mask,"\033[1;7C",     0,    0},
 	{ XK_Right,ShiftMask|ControlMask|Mod1Mask,"\033[1;8C",0,   0},
 	{ XK_Right,         XK_ANY_MOD,     "\033[C",        0,   -1},
 	{ XK_Right,         XK_ANY_MOD,     "\033OC",        0,   +1},
-	{ XK_ISO_Left_Tab,  ShiftMask,      "\033[Z",        0,    0},
+	{ XK_ISO_Left_Tab,  ShiftMask,      "\033[9;2u",     0,    0},
+	{ XK_Tab,           ShiftMask,      "\033[9;2u",     0,    0},
+	{ XK_space,         ControlMask,    "\033[32;5u",    0,    0},
+	{ XK_space,         Mod1Mask,       "\033[32;3u",    0,    0},
 	{ XK_Return,        Mod1Mask,       "\033\r",        0,    0},
 	{ XK_Return,        ShiftMask,      "\033[13;2u",    0,    0},
 	{ XK_Return,        XK_ANY_MOD,     "\r",            0,    0},
@@ -353,7 +358,13 @@ static Key key[] = {
 	{ XK_Delete,        XK_ANY_MOD,     "\033[P",       -1,    0},
 	{ XK_Delete,        XK_ANY_MOD,     "\033[3~",      +1,    0},
 	{ XK_BackSpace,     XK_NO_MOD,      "\177",          0,    0},
-	{ XK_BackSpace,     Mod1Mask,       "\033\177",      0,    0},
+	{ XK_BackSpace,     ControlMask,    "\025",          0,    0}, /* Ctrl+Backspace: kill to start of line */
+	{ XK_BackSpace,     Mod4Mask,       "\033\177",      0,    0}, /* Opt+Backspace: backward word */
+	{ XK_BackSpace,     ShiftMask,      "\033[127;2u",   0,    0},
+	{ XK_BackSpace,     Mod1Mask,       "\177",          0,    0}, /* Alt+Backspace: one char */
+	{ XK_BackSpace,     ShiftMask|Mod1Mask,"\177",       0,    0},
+	{ XK_BackSpace,     ControlMask|Mod1Mask,"\177",     0,    0},
+	{ XK_BackSpace,     ShiftMask|ControlMask|Mod1Mask,"\177",0,0},
 	{ XK_Home,          ShiftMask,      "\033[2J",       0,   -1},
 	{ XK_Home,          ShiftMask,      "\033[1;2H",     0,   +1},
 	{ XK_Home,          XK_ANY_MOD,     "\033[H",        0,   -1},

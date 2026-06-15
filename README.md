@@ -261,6 +261,30 @@ Claude also runs an early safety hook from `settings.json`:
 
 The hook blocks obvious destructive Bash commands, `git commit --no-verify`, forced `git add`, and writes to forbidden dotfiles paths such as auth, cache, state, browser profile, and package/vendor directories. It also runs `scripts/check-dotfiles-safety --quiet` after mutating tool calls in the dotfiles repo.
 
+### Claude plugins and MCP policy
+
+Treat plugins and MCP servers as supply-chain code. Prefer official, pinned, reviewed integrations. Avoid installing marketplace plugins just because they are available.
+
+Current baseline:
+
+```text
+playwright MCP -> @playwright/mcp@0.0.76 --browser chromium
+```
+
+Candidate Claude plugins to review before installing:
+
+```text
+claude-code-setup
+claude-md-management
+code-review
+pr-review-toolkit
+security-guidance
+context7
+serena
+```
+
+Install only after checking plugin inventory, token cost, MCP servers, hooks, commands, and required credentials.
+
 ## Pi coding agent
 
 Pi runtime config lives in:
@@ -306,9 +330,62 @@ pi install npm:pi-sensitive-guard
 pi install git:github.com/elpapi42/pi-fork
 pi install npm:pi-mcp-adapter
 pi install npm:pi-rtk-optimizer
+pi install npm:graphify-pi
 ```
 
 Restart Pi after package changes.
+
+### Pi MCP baseline
+
+Pi uses `pi-mcp-adapter`. Keep global Pi MCP config in:
+
+```text
+~/.config/pi/agent/mcp.json
+```
+
+Current baseline matches Claude's browser automation server:
+
+```text
+playwright MCP -> @playwright/mcp@0.0.76 --browser chromium
+```
+
+Prefer standard shared MCP files such as `~/.config/mcp/mcp.json` only after deciding which servers should be cross-tool rather than Pi-specific.
+
+### Graphify
+
+Graphify maps project files into a queryable knowledge graph and wiki.
+
+Global CLI install:
+
+```sh
+uv tool install graphifyy
+```
+
+Shared Claude skill location:
+
+```text
+~/.config/agents/skills/graphify
+~/.config/claude/skills/graphify -> ../agents/skills/graphify
+```
+
+Pi integration is provided by `npm:graphify-pi`, which adds Pi graph-first guidance and a native `/graphify` command when `graphify-out/` exists.
+
+Current Obsidian AI knowledge vault:
+
+```text
+~/.local/share/obsidian/vaults/ai-knowledge
+```
+
+For this dotfiles repo, treat `graphify-out/` and `.graphify/` as generated local state. Keep them ignored and export only reviewed notes to the Obsidian vault. Other projects may choose to commit `graphify-out/` when team graph sharing is desired.
+
+Useful commands:
+
+```sh
+graphify . --wiki
+graphify query "show the auth flow"
+graphify explain "RateLimiter"
+graphify path "A" "B"
+```
 
 ### Current Pi settings
 
@@ -450,6 +527,8 @@ pi install npm:pi-sensitive-guard
 pi install git:github.com/elpapi42/pi-fork
 pi install npm:pi-mcp-adapter
 pi install npm:pi-rtk-optimizer
+pi install npm:graphify-pi
+uv tool install graphifyy
 
 # 9. enable repo-local safety hook
 cd ~/.config

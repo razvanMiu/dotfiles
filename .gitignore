@@ -14,11 +14,13 @@
 !/.gitignore
 !/CONTEXT.md
 !/README.md
+!/KEYBINDINGS.md
 
 # Directories
 !/agents/
 !/claude/
 !/docs/
+!/dunst/
 !/dwm/
 !/git/
 !/kitty/

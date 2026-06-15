@@ -1,0 +1,25 @@
+#!/bin/sh
+# Pick a dunst notification from history with rofi and copy its text.
+
+hist=$(dunstctl history 2>/dev/null) || exit 1
+
+selection=$(printf '%s' "$hist" | jq -r '
+  .data[0][]? |
+  [(.id.data|tostring), .summary.data, (.body.data | gsub("\\n"; "  "))] |
+  @tsv
+' | rofi -dmenu -i -p "Copy notification")
+
+[ -n "$selection" ] || exit 0
+id=${selection%%	*}
+
+text=$(printf '%s' "$hist" | jq -r --argjson id "$id" '
+  .data[0][]? |
+  select(.id.data == $id) |
+  [.summary.data, .body.data] |
+  map(select(. != null and . != "")) |
+  join("\n")
+')
+
+[ -n "$text" ] || exit 1
+printf '%s' "$text" | xclip -selection clipboard
+notify-send "Dunst" "Copied notification to clipboard"

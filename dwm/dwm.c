@@ -69,6 +69,7 @@ enum { NetSupported, NetWMName, NetWMState, NetWMCheck,
 enum { WMProtocols, WMDelete, WMState, WMTakeFocus, WMLast }; /* default atoms */
 enum { ClkTagBar, ClkLtSymbol, ClkStatusText, ClkWinTitle,
        ClkClientWin, ClkRootWin, ClkLast }; /* clicks */
+enum { DirLeft, DirDown, DirUp, DirRight }; /* directional focus */
 
 typedef union {
 	int i;
@@ -192,6 +193,7 @@ static void expose(XEvent *e);
 static void focus(Client *c);
 static void focusin(XEvent *e);
 static void focusmon(const Arg *arg);
+static void focusdir(const Arg *arg);
 static void focusstack(const Arg *arg);
 static Atom getatomprop(Client *c, Atom prop);
 static int getrootptr(int *x, int *y);
@@ -309,6 +311,7 @@ static Window root, wmcheckwin;
 /* configuration, allows nested code to access above variables */
 #define DWM_CONTEXT
 #include "config.h"
+#include "features/focusdir.c"
 #include "features/dropdown.c"
 #include "features/status.c"
 

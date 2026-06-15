@@ -28,6 +28,10 @@ _Avoid_: polybar, eww bar, heavy status bar, external overlay bar
 Focused C files under `features/` included by `dwm.c` after `config.h`. They keep local dwm extensions distinguishable from core dwm code while still sharing dwm internals.
 _Avoid_: mixing feature implementation blocks into `dwm.c`, separate object build complexity
 
+**Directional window navigation**:
+Keyboard focus movement with Opt+h/j/k/l. In the tiled layout, h/l moves between the master and stack columns while j/k cycles within the current column. Outside the tiled layout, j/k falls back to dwm stack-order focus and h/l intentionally do nothing.
+_Avoid_: monitor navigation, global stack cycling, floating-window spatial search
+
 **Dropdown notes**:
 A native dropdown st window running Neovim against the notes inbox under `$XDG_DOCUMENTS_DIR/notes`, currently toggled with Mod+n.
 _Avoid_: dropdown-test, temporary test dropdown

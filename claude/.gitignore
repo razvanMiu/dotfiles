@@ -11,10 +11,10 @@
 # Tracked as a symlink so it's recreated on a fresh checkout.
 !skills
 
-# Plugin marketplace registry (config), but not the cloned repos themselves
+# Claude plugin marketplace state/cache stays ignored.
+# Re-add explicit safe config here if needed later.
 !plugins/
 plugins/*
-!plugins/known_marketplaces.json
 
 # --- Notes on what stays ignored (secrets / runtime / history) ---
 #   .credentials.json          -> auth tokens

@@ -8,7 +8,7 @@ XDG-friendly tmux setup for moving from kitty tabs to `st` + tmux.
 - Plugin/vendor code: `~/.local/share/tmux/plugins`
 - Saved session state: `~/.local/state/tmux/resurrect`
 - Config is split under `~/.config/tmux/conf.d/`; `tmux.conf` is only the source order
-- Scripts: `~/.config/tmux/scripts/git-branch`, `project-session`, `open-url`, `find-scrollback`
+- Scripts: `~/.config/tmux/scripts/git-branch`, `project-session`, `open-url`, `find-scrollback`, `sessionx-launch`
 - Status helpers: `~/.config/tmux/status/git_branch.conf`
 
 ## Dependencies
@@ -27,21 +27,21 @@ Notes:
 
 ## Plugin bootstrap
 
-TPM itself is intentionally not tracked in this repo:
+Runtime plugin loading is explicit and deterministic: `conf.d/30-plugins.conf` and `conf.d/20-theme.conf` source the installed plugin files directly from `~/.local/share/tmux/plugins`. This avoids TPM hook-order races on reboot/reload.
 
-```sh
-mkdir -p ~/.local/share/tmux/plugins ~/.local/state/tmux/resurrect
-git clone https://github.com/tmux-plugins/tpm ~/.local/share/tmux/plugins/tpm
-```
-
-Inside tmux, install/update plugins with:
+Required plugin directories:
 
 ```text
-prefix + I  # install
-prefix + U  # update
+~/.local/share/tmux/plugins/tmux
+~/.local/share/tmux/plugins/tmux-sessionx
+~/.local/share/tmux/plugins/tmux-sensible
+~/.local/share/tmux/plugins/tmux-yank
+~/.local/share/tmux/plugins/vim-tmux-navigator
+~/.local/share/tmux/plugins/tmux-resurrect
+~/.local/share/tmux/plugins/tmux-continuum
 ```
 
-Current prefix is `C-b`.
+TPM can still live under `~/.local/share/tmux/plugins/tpm` as a bootstrap/update tool, but it is not part of tmux runtime startup. Current prefix is `C-b`.
 
 ## Pi compatibility
 
@@ -51,7 +51,7 @@ Current prefix is `C-b`.
 set -g extended-keys on
 ```
 
-This is not a tmux shortcut. It tells tmux to pass richer modified-key sequences through to terminal apps, so Pi can distinguish combinations such as Ctrl/Shift/Alt-modified keys when launched inside tmux.
+This is not a tmux shortcut. It tells tmux to pass richer modified-key sequences through to terminal apps, so Pi can distinguish combinations such as Ctrl/Shift/Alt-modified keys when launched inside tmux. The local `st` build emits CSI-u for AI-CLI-sensitive keys such as Shift+Tab, Shift+Enter, Shift+Backspace, Alt+Space, and Ctrl+Space.
 
 Reload after config edits with `C-b r`, or from a shell with:
 

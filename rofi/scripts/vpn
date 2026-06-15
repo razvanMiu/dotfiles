@@ -1,0 +1,228 @@
+#!/bin/sh
+# Rofi custom mode for NetworkManager VPN/WireGuard profiles.
+# In rofi custom-mode protocol:
+#   - no arguments: print selectable entries
+#   - one argument: act on selected entry
+
+notify() {
+    if command -v notify-send >/dev/null 2>&1; then
+        notify-send "VPN" "$1"
+    fi
+}
+
+need_nmcli() {
+    if ! command -v nmcli >/dev/null 2>&1; then
+        printf '%s\n' "NetworkManager nmcli not found. Install: networkmanager"
+        exit 0
+    fi
+}
+
+list_profiles() {
+    need_nmcli
+
+    printf '%s\t%s\t%s\n' "Import OpenVPN profile" "" "import-openvpn"
+    printf '%s\t%s\t%s\n' "Import WireGuard profile" "" "import-wireguard"
+
+    active_uuids=$(nmcli -t -f UUID,TYPE connection show --active 2>/dev/null \
+        | awk -F: '$2 == "vpn" || $2 == "wireguard" { print $1 }')
+
+    nmcli -t -f UUID,NAME,TYPE connection show 2>/dev/null \
+        | awk -F: -v active="$active_uuids" '
+            BEGIN {
+                split(active, a, "\n")
+                for (i in a) if (a[i] != "") is_active[a[i]] = 1
+            }
+            $3 == "vpn" || $3 == "wireguard" {
+                state = is_active[$1] ? "Disconnect" : "Connect"
+                printf "%s\t%s\t%s\n", state, $2, $1
+                found = 1
+            }'
+}
+
+candidate_files() {
+    type=$1
+
+    case "$type" in
+        openvpn) names='*.ovpn' ;;
+        wireguard) names='*.conf' ;;
+        *) exit 1 ;;
+    esac
+
+    # Keep this broad enough to find downloaded configs, but avoid scanning
+    # cache/vendor trees that make rofi noisy and slow.
+    find "$HOME" /etc/wireguard /etc/openvpn 2>/dev/null \
+        -path "$HOME/.cache" -prune -o \
+        -path "$HOME/.local/share/Trash" -prune -o \
+        -type f -iname "$names" -print
+}
+
+import_profile() {
+    type=$1
+    need_nmcli
+
+    file=$(candidate_files "$type" | sort -u | rofi -dmenu -i -p "Import $type")
+    [ -n "$file" ] || exit 0
+
+    if nmcli connection import type "$type" file "$file" >/tmp/rofi-vpn-nmcli.out 2>/tmp/rofi-vpn-nmcli.err; then
+        name=$(sed -n "s/^Connection '\(.*\)' (.* successfully added.*$/\1/p" /tmp/rofi-vpn-nmcli.out | head -1)
+        notify "Imported: ${name:-$file}"
+    else
+        err=$(cat /tmp/rofi-vpn-nmcli.err 2>/dev/null)
+        notify "Failed to import: $file${err:+\n$err}"
+        exit 1
+    fi
+}
+
+connection_has_username() {
+    uuid=$1
+    nmcli -g vpn.data connection show uuid "$uuid" 2>/dev/null \
+        | grep -Eq '(^|, )username ?='
+}
+
+connection_has_challenge_response() {
+    uuid=$1
+    nmcli -g vpn.data connection show uuid "$uuid" 2>/dev/null \
+        | grep -Eq '(^|, )challenge-response-flags ?='
+}
+
+connect_interactive_terminal() {
+    uuid=$1
+    name=$2
+
+    if command -v st >/dev/null 2>&1; then
+        exec st -T "VPN: $name" -e nmcli --ask connection up uuid "$uuid"
+    elif command -v xterm >/dev/null 2>&1; then
+        exec xterm -T "VPN: $name" -e nmcli --ask connection up uuid "$uuid"
+    else
+        notify "Cannot open interactive VPN prompt: install st or xterm"
+        exit 1
+    fi
+}
+
+prompt_missing_openvpn_secrets() {
+    uuid=$1
+    name=$2
+
+    if ! connection_has_username "$uuid"; then
+        username=$(printf '%s\n' "${USER:-}" | rofi -dmenu -p "VPN username: $name")
+        [ -n "$username" ] || exit 0
+        nmcli connection modify uuid "$uuid" +vpn.data "username=$username" \
+            >/tmp/rofi-vpn-nmcli.out 2>/tmp/rofi-vpn-nmcli.err || {
+                err=$(cat /tmp/rofi-vpn-nmcli.err 2>/dev/null)
+                notify "Failed to set username: $name${err:+\n$err}"
+                exit 1
+            }
+    fi
+
+    password=$(rofi -dmenu -password -p "VPN password: $name")
+    [ -n "$password" ] || exit 0
+
+    cert_password=$(printf '%s\n' "reuse VPN password" "blank/no cert password" \
+        | rofi -dmenu -password -p "PKCS12/cert password: $name")
+    case "$cert_password" in
+        "") cert_password="" ;;
+        "blank/no cert password") cert_password="" ;;
+        "reuse VPN password") cert_password=$password ;;
+    esac
+
+    passfile=$(mktemp "${XDG_RUNTIME_DIR:-/tmp}/rofi-vpn-pass.XXXXXX") || exit 1
+    chmod 600 "$passfile"
+    {
+        printf 'vpn.secrets.password:%s\n' "$password"
+        [ -n "$cert_password" ] && printf 'vpn.secrets.cert-pass:%s\n' "$cert_password"
+    } > "$passfile"
+
+    if nmcli connection up uuid "$uuid" passwd-file "$passfile" \
+        >/tmp/rofi-vpn-nmcli.out 2>/tmp/rofi-vpn-nmcli.err; then
+        rm -f "$passfile"
+        notify "Connected: $name"
+    else
+        rm -f "$passfile"
+        err=$(cat /tmp/rofi-vpn-nmcli.err 2>/dev/null)
+        notify "Failed to connect: $name${err:+\n$err}"
+        exit 1
+    fi
+}
+
+connect_profile() {
+    uuid=$1
+    name=$2
+    need_nmcli
+
+    # WiKID/OpenVPN challenge-response needs a live nmcli --ask session.
+    # A passwd-file can provide initial secrets, but cannot answer the later
+    # dynamic challenge prompt reliably.
+    if connection_has_challenge_response "$uuid"; then
+        connect_interactive_terminal "$uuid" "$name"
+    fi
+
+    if nmcli connection up uuid "$uuid" >/tmp/rofi-vpn-nmcli.out 2>/tmp/rofi-vpn-nmcli.err; then
+        notify "Connected: $name"
+        exit 0
+    fi
+
+    err=$(cat /tmp/rofi-vpn-nmcli.err 2>/dev/null)
+    case "$err" in
+        *"vpn.secrets.password"*|*"No valid secrets"*)
+            prompt_missing_openvpn_secrets "$uuid" "$name"
+            ;;
+        *)
+            notify "Failed to connect: $name${err:+\n$err}"
+            exit 1
+            ;;
+    esac
+}
+
+run_selection() {
+    need_nmcli
+
+    selection=$1
+    action=$(printf '%s' "$selection" | awk -F '\t' '{print $1}')
+    name=$(printf '%s' "$selection" | awk -F '\t' '{print $2}')
+    uuid=$(printf '%s' "$selection" | awk -F '\t' '{print $3}')
+
+    [ -n "$uuid" ] || exit 0
+
+    case "$uuid" in
+        import-openvpn)
+            # Spawn after current rofi instance closes, otherwise nested rofi can race.
+            ( sleep 0.15; exec "$0" --import openvpn ) >/tmp/rofi-vpn-import.out 2>/tmp/rofi-vpn-import.err &
+            exit 0
+            ;;
+        import-wireguard)
+            ( sleep 0.15; exec "$0" --import wireguard ) >/tmp/rofi-vpn-import.out 2>/tmp/rofi-vpn-import.err &
+            exit 0
+            ;;
+    esac
+
+    case "$action" in
+        Connect)
+            # Spawn after current rofi instance closes so password prompts can use rofi.
+            ( sleep 0.15; exec "$0" --connect "$uuid" "$name" ) >/tmp/rofi-vpn-connect.out 2>/tmp/rofi-vpn-connect.err &
+            ;;
+        Disconnect)
+            if nmcli connection down uuid "$uuid" >/tmp/rofi-vpn-nmcli.out 2>/tmp/rofi-vpn-nmcli.err; then
+                notify "Disconnected: $name"
+            else
+                err=$(cat /tmp/rofi-vpn-nmcli.err 2>/dev/null)
+                notify "Failed to disconnect: $name${err:+\n$err}"
+                exit 1
+            fi
+            ;;
+    esac
+}
+
+case "$1" in
+    --import)
+        import_profile "$2"
+        ;;
+    --connect)
+        connect_profile "$2" "$3"
+        ;;
+    "")
+        list_profiles
+        ;;
+    *)
+        run_selection "$1"
+        ;;
+esac

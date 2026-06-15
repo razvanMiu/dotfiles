@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+plugin_dir="${HOME}/.local/share/tmux/plugins/tmux-sessionx"
+init_script="${plugin_dir}/sessionx.tmux"
+open_script="${plugin_dir}/scripts/sessionx.sh"
+
+if [[ ! -x "$init_script" && ! -r "$init_script" ]]; then
+  tmux display-message "SessionX is not installed: $init_script"
+  exit 1
+fi
+
+if [[ ! -x "$open_script" && ! -r "$open_script" ]]; then
+  tmux display-message "SessionX launcher is missing: $open_script"
+  exit 1
+fi
+
+# sessionx.sh consumes generated @sessionx-_built-* options. Rebuild them right
+# before opening so C-b o is reliable after reboot, restore, and config reload.
+bash "$init_script" >/dev/null 2>&1
+bash "$open_script"

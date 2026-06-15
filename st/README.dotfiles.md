@@ -9,7 +9,9 @@ Razvan's XDG-tracked suckless `st` build.
 - TERM: `st-256color`
 - Opacity: `1.0`; dropdown translucency/blur is owned by picom rules, not st
 - Clipboard: selections are copied to X11 CLIPBOARD; `Ctrl+v`, middle-click, and Shift+Insert paste CLIPBOARD
-- Shift+Enter emits CSI-u (`\033[13;2u`) for tmux/Pi modified-key handling
+- AI CLI modified keys emit CSI-u for tmux/Pi/Claude-style input handling: Shift+Tab (`\033[9;2u`), Shift+Enter (`\033[13;2u`), Shift+Backspace (`\033[127;2u`), Alt+Space (`\033[32;3u`), and Ctrl+Space (`\033[32;5u`)
+- Navigation policy: Opt uses `Mod4Mask`, Alt uses `Mod1Mask`. Opt+Left/Right sends Alt+b/f for word movement; Ctrl+Left/Right sends Ctrl+A/E for start/end of the input line; Alt+Left/Right sends plain left/right arrow movement.
+- Backspace policy: Ctrl+Backspace sends Ctrl+U (`\025`) to kill from cursor to start of line; Opt+Backspace uses Mod4Mask and sends Alt+Backspace (`\033\177`) for backward-word deletion; Alt+Backspace uses Mod1Mask and sends plain Backspace (`\177`) for one-character deletion.
 - Scrollback: intentionally delegated to tmux, not patched into st
 
 ## tmux compatibility

@@ -1,21 +1,11 @@
 {
-    "settings": {
-        "toolPrefix": "short"
-    },
-    "mcpServers": {
-        "github": {
-            "command": "bunx",
-            "args": ["@modelcontextprotocol/server-github"],
-            "env": {
-                "GITHUB_TOKEN": "$GITHUB_TOKEN"
-            },
-            "directTools": [
-                "search_repositories",
-                "get_file_contents",
-                "create_issue",
-                "list_issues"
-            ],
-            "lifecycle": "lazy"
-        }
+  "settings": {
+    "toolPrefix": "short"
+  },
+  "mcpServers": {
+    "playwright": {
+      "command": "npx",
+      "args": ["@playwright/mcp@0.0.76", "--browser", "chromium"]
     }
+  }
 }

@@ -15,6 +15,10 @@ if command -v picom >/dev/null 2>&1 && ! pgrep -x picom >/dev/null 2>&1; then
 		> "$state_dir/picom.log" 2>&1 &
 fi
 
+if command -v dunst >/dev/null 2>&1 && ! pgrep -x dunst >/dev/null 2>&1; then
+	dunst > "$state_dir/dunst.log" 2>&1 &
+fi
+
 status_cmd="${HOME}/.local/bin/dwm-status"
 if [ ! -x "$status_cmd" ]; then
 	status_cmd="$(command -v dwm-status 2>/dev/null || true)"

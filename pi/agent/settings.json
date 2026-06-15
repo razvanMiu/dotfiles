@@ -1,5 +1,5 @@
 {
-  "lastChangelogVersion": "0.78.1",
+  "lastChangelogVersion": "0.79.3",
   "defaultProvider": "openai-codex",
   "defaultModel": "gpt-5.5",
   "defaultThinkingLevel": "medium",
@@ -14,7 +14,8 @@
     "npm:pi-sensitive-guard",
     "git:github.com/elpapi42/pi-fork",
     "npm:pi-mcp-adapter",
-    "npm:pi-rtk-optimizer"
+    "npm:pi-rtk-optimizer",
+    "npm:graphify-pi"
   ],
   "hideThinkingBlock": true
 }
