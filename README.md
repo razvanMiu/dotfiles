@@ -18,6 +18,7 @@ If `~/.config` already exists on a new machine, clone elsewhere first and copy/a
 - Cache: `~/.cache`
 - Local binaries: `~/.local/bin`
 - Shared agent resources: `~/.agents -> ~/.config/agents`
+- Keyboard contract: `~/.config/KEYBINDINGS.md`
 
 ## Dotfiles-wide secrets
 
@@ -147,6 +148,119 @@ cat > ~/.gitconfig <<'EOF'
 EOF
 ```
 
+This repo uses a repo-local hooks path:
+
+```sh
+cd ~/.config
+git config core.hooksPath git/hooks
+```
+
+The pre-commit hook runs the guard quietly:
+
+```sh
+scripts/check-dotfiles-safety --quiet
+```
+
+The guard checks staged files, tracked files, and untracked non-ignored files for forbidden dotfiles content such as secrets, auth files, sessions, caches, browser profiles, package/vendor installs, and generated state. Ignored files are not blocking by default; inspect them explicitly with:
+
+```sh
+scripts/check-dotfiles-safety --audit-ignored
+```
+
+## Agent configuration
+
+Shared, tool-neutral agent resources live in:
+
+```text
+~/.config/agents
+~/.agents -> ~/.config/agents
+```
+
+Canonical global agent instructions live in:
+
+```text
+~/.config/agents/AGENTS.md
+```
+
+Pi and Claude Code consume those canonical instructions differently:
+
+```text
+~/.config/pi/agent/AGENTS.md -> ../../agents/AGENTS.md
+~/.config/claude/CLAUDE.md   # imports @../agents/AGENTS.md
+```
+
+The canonical marker for loading tests is:
+
+```text
+xdg-agent-canonical-v1
+```
+
+Verify pi loading:
+
+```sh
+cd ~/.config
+PI_OFFLINE=1 pi --no-session -p "Reply only with the canonical marker from your loaded instructions."
+```
+
+Verify Claude Code loading:
+
+```sh
+cd ~/.config
+CLAUDE_CONFIG_DIR="$XDG_CONFIG_HOME/claude" \
+  claude -p "Reply only with the canonical marker from your loaded instructions."
+```
+
+Expected output for both:
+
+```text
+xdg-agent-canonical-v1
+```
+
+See also:
+
+```text
+~/.config/docs/adr/0002-agent-configuration-boundaries.md
+```
+
+## Claude Code
+
+Claude Code uses the XDG config root through:
+
+```sh
+CLAUDE_CONFIG_DIR="$XDG_CONFIG_HOME/claude"
+```
+
+Tracked Claude config is limited to portable authored files such as:
+
+```text
+~/.config/claude/settings.json
+~/.config/claude/CLAUDE.md
+~/.config/claude/skills -> ../agents/skills
+~/.config/claude/.gitignore
+```
+
+Claude Code is a mixed tool directory: it stores generated state next to authored config. Keep auth, history, transcripts, caches, plugin state, shell snapshots, backups, and downloads ignored.
+
+The default Claude permission posture is autonomous within hard boundaries:
+
+```json
+{
+  "permissions": {
+    "defaultMode": "bypassPermissions"
+  }
+}
+```
+
+Do not rely on prompts alone for safety. The dotfiles safety guard is the final commit-time gate.
+
+Claude also runs an early safety hook from `settings.json`:
+
+```text
+~/.config/scripts/claude-safety-hook
+```
+
+The hook blocks obvious destructive Bash commands, `git commit --no-verify`, forced `git add`, and writes to forbidden dotfiles paths such as auth, cache, state, browser profile, and package/vendor directories. It also runs `scripts/check-dotfiles-safety --quiet` after mutating tool calls in the dotfiles repo.
+
 ## Pi coding agent
 
 Pi runtime config lives in:
@@ -155,13 +269,13 @@ Pi runtime config lives in:
 ~/.config/pi/agent/settings.json
 ```
 
-Global Pi instructions live in:
+Global Pi instructions are the canonical cross-agent instructions exposed through a relative symlink:
 
 ```text
-~/.config/pi/agent/AGENTS.md
+~/.config/pi/agent/AGENTS.md -> ../../agents/AGENTS.md
 ```
 
-These instructions bias Pi toward disciplined engineering work: read before edit, small validated changes, subagents for noisy scouting/review, and no secret/runtime commits.
+These instructions bias Pi toward disciplined engineering work: read before edit, small validated changes, subagents for noisy scouting/review, measurable verification, and no secret/runtime commits.
 
 Do not commit Pi runtime/secrets. The local ignore file excludes:
 
@@ -171,8 +285,14 @@ Do not commit Pi runtime/secrets. The local ignore file excludes:
 ~/.config/pi/agent/bin/
 ~/.config/pi/agent/npm/
 ~/.config/pi/agent/git/
+~/.config/pi/agent/mcp-cache.json
+~/.config/pi/agent/mcp-npx-cache.json
+~/.config/pi/agent/run-history.jsonl
+~/.config/pi/agent/trust.json
 *.log
 ```
+
+Pi currently hardcodes user-installed extension packages under `PI_CODING_AGENT_DIR` as `npm/` and `git/`. Do not set `PI_PACKAGE_DIR` for this purpose; pi uses that variable for its own executable/package asset directory. Keep generated package directories ignored until pi exposes supported relocation paths.
 
 ### Install Pi packages
 
@@ -185,7 +305,6 @@ pi install npm:pi-observational-memory
 pi install npm:pi-sensitive-guard
 pi install git:github.com/elpapi42/pi-fork
 pi install npm:pi-mcp-adapter
-pi install npm:pi-skill-hub
 pi install npm:pi-rtk-optimizer
 ```
 
@@ -193,16 +312,16 @@ Restart Pi after package changes.
 
 ### Current Pi settings
 
-`~/.config/pi/agent/settings.json` points Pi at shared skills through the `~/.agents` symlink:
+`~/.config/pi/agent/settings.json` points Pi at shared skills through a portable relative path:
 
 ```json
 {
   "enableSkillCommands": true,
-  "skills": ["~/.agents/skills"]
+  "skills": ["../../agents/skills"]
 }
 ```
 
-Pi also discovers `~/.agents/skills` by default, but keeping it in settings makes the dependency explicit.
+`~/.agents -> ~/.config/agents` is still created for tools that understand the shared agent convention.
 
 ## Shared agent skills
 
@@ -330,8 +449,12 @@ pi install npm:pi-observational-memory
 pi install npm:pi-sensitive-guard
 pi install git:github.com/elpapi42/pi-fork
 pi install npm:pi-mcp-adapter
-pi install npm:pi-skill-hub
 pi install npm:pi-rtk-optimizer
+
+# 9. enable repo-local safety hook
+cd ~/.config
+git config core.hooksPath git/hooks
+scripts/check-dotfiles-safety
 ```
 
 ## Commit workflow
@@ -340,7 +463,7 @@ pi install npm:pi-rtk-optimizer
 cd ~/.config
 git status
 git diff
-git add README.md agents scripts pi/agent/settings.json pi/agent/AGENTS.md zsh git
+git add README.md CONTEXT.md docs/adr agents claude pi/agent scripts git zsh
 git commit -m "update dotfiles"
 git push
 ```

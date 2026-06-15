@@ -4,3 +4,7 @@ bin/
 npm/
 git/
 *.log
+mcp-cache.json
+mcp-npx-cache.json
+run-history.jsonl
+trust.json

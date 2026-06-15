@@ -1,0 +1,96 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+input="$(cat)"
+event="$(jq -r '.hook_event_name // empty' <<<"$input")"
+tool="$(jq -r '.tool_name // empty' <<<"$input")"
+cwd="$(jq -r '.cwd // empty' <<<"$input")"
+xdg_config="${XDG_CONFIG_HOME:-$HOME/.config}"
+
+block() {
+  echo "blocked by dotfiles safety hook: $1" >&2
+  exit 2
+}
+
+rel_to_config() {
+  local path="$1"
+  [[ -n "$path" ]] || return 1
+  case "$path" in
+    ~/*) path="$HOME/${path#~/}" ;;
+  esac
+  if [[ "$path" != /* ]]; then
+    path="${cwd:-$PWD}/$path"
+  fi
+  path="$(realpath -m -- "$path")"
+  case "$path" in
+    "$xdg_config") printf '.' ;;
+    "$xdg_config"/*) printf '%s' "${path#"$xdg_config"/}" ;;
+    *) return 1 ;;
+  esac
+}
+
+is_forbidden_dotfiles_path() {
+  local path="$1"
+  case "$path" in
+    .env|*.pem|*.key|*.p12|*.pfx|*_rsa|*_ed25519|*.agekey) return 0 ;;
+    *.credentials.json|*/.credentials.json|auth.json|*/auth.json|storage_state.json|*/storage_state.json|cookies.json|*/cookies.json|cookies.*.json|*/cookies.*.json) return 0 ;;
+    claude/.claude.json|claude/history.jsonl|claude/projects/*|claude/cache/*|claude/paste-cache/*|claude/image-cache/*|claude/shell-snapshots/*|claude/backups/*|claude/file-history/*|claude/plans/*|claude/session-env/*|claude/downloads/*|claude/mcp-needs-auth-cache.json|claude/stats-cache.json) return 0 ;;
+    pi/agent/auth.json|pi/agent/run-history.jsonl|pi/agent/sessions/*|pi/agent/mcp-cache.json|pi/agent/mcp-npx-cache.json|pi/agent/trust.json|pi/agent/bin/*|pi/agent/npm/*|pi/agent/git/*) return 0 ;;
+    node_modules/*|*/node_modules/*|__pycache__/*|*/__pycache__/*|.pytest_cache/*|*/.pytest_cache/*|dist/*|*/dist/*|build/*|*/build/*) return 0 ;;
+    BraveSoftware/*|google-chrome*/*|chromium/*|Chrome/*|Firefox/*) return 0 ;;
+  esac
+  return 1
+}
+
+check_file_path() {
+  local file_path="$1" rel
+  rel="$(rel_to_config "$file_path")" || return 0
+  if is_forbidden_dotfiles_path "$rel"; then
+    block "refusing $tool on forbidden dotfiles path: $rel"
+  fi
+}
+
+check_bash() {
+  local command="$1"
+  [[ -n "$command" ]] || return 0
+
+  if grep -Eiq '(^|[;&|[:space:]])rm[[:space:]]+(-[A-Za-z]*r[A-Za-z]*f|-f[A-Za-z]*r|-r[A-Za-z]*f)[[:space:]]+(/|~|\$HOME|\$\{HOME\}|\.\.|/home/[^[:space:]]*)($|[[:space:]/;&|])' <<<"$command"; then
+    block "destructive rm target needs explicit manual approval"
+  fi
+  if grep -Eiq '(^|[;&|[:space:]])rm[[:space:]]+(-[A-Za-z]*r[A-Za-z]*f|-f[A-Za-z]*r|-r[A-Za-z]*f)[[:space:]]+(~/.config|\$XDG_CONFIG_HOME|\$\{XDG_CONFIG_HOME\}|/home/[^[:space:]]+/.config)($|[[:space:]/;&|])' <<<"$command"; then
+    block "destructive rm against config dir"
+  fi
+  if grep -Eiq '(^|[;&|[:space:]])(sudo[[:space:]]+)?(mkfs|fdisk|parted|dd[[:space:]].*\bof=/dev/|shutdown|reboot)\b' <<<"$command"; then
+    block "system-destructive command needs explicit manual approval"
+  fi
+  if grep -Eiq '(^|[;&|[:space:]])git[[:space:]]+commit\b.*--no-verify\b' <<<"$command"; then
+    block "git commit --no-verify bypasses safety hook"
+  fi
+  if grep -Eiq '(^|[;&|[:space:]])git[[:space:]]+add\b.*(^|[[:space:]])(-f|--force)($|[[:space:]])' <<<"$command"; then
+    block "git add --force can stage ignored secrets/state"
+  fi
+  if grep -Eiq '(^|[;&|[:space:]])chmod[[:space:]]+-R[[:space:]]+777[[:space:]]+(~|/|\$HOME|\$\{HOME\}|\$XDG_CONFIG_HOME|\$\{XDG_CONFIG_HOME\})' <<<"$command"; then
+    block "recursive world-writable chmod on broad path"
+  fi
+}
+
+run_dotfiles_guard_if_applicable() {
+  local dir="${cwd:-$PWD}" root
+  root="$(git -C "$dir" rev-parse --show-toplevel 2>/dev/null || true)"
+  [[ "${root%/}" == "${xdg_config%/}" ]] || return 0
+  "$xdg_config/scripts/check-dotfiles-safety" --quiet || block "dotfiles safety guard failed after tool use"
+}
+
+case "$event:$tool" in
+  PreToolUse:Bash)
+    check_bash "$(jq -r '.tool_input.command // empty' <<<"$input")"
+    ;;
+  PreToolUse:Write|PreToolUse:Edit|PreToolUse:MultiEdit)
+    check_file_path "$(jq -r '.tool_input.file_path // empty' <<<"$input")"
+    ;;
+  PostToolUse:Bash|PostToolUse:Write|PostToolUse:Edit|PostToolUse:MultiEdit)
+    run_dotfiles_guard_if_applicable
+    ;;
+esac
+
+exit 0

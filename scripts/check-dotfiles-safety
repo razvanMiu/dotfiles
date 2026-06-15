@@ -1,0 +1,197 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Enforce dotfiles hard-boundary rules.
+# Default scope checks staged files, tracked files, and untracked non-ignored files.
+# Ignored files are intentionally excluded unless --audit-ignored is passed.
+
+usage() {
+  cat <<'EOF'
+Usage: scripts/check-dotfiles-safety [--staged] [--audit-ignored] [--quiet]
+
+  default          Check staged + tracked + untracked non-ignored files.
+  --staged         Check staged files only.
+  --audit-ignored  Summarize ignored suspicious files. Does not change path rules.
+  --quiet          Print nothing on success.
+EOF
+}
+
+mode="default"
+audit_ignored=0
+quiet=0
+
+for arg in "$@"; do
+  case "$arg" in
+    --staged) mode="staged" ;;
+    --audit-ignored) audit_ignored=1 ;;
+    --quiet) quiet=1 ;;
+    -h|--help) usage; exit 0 ;;
+    *) echo "Unknown argument: $arg" >&2; usage >&2; exit 2 ;;
+  esac
+done
+
+repo_root="$(git rev-parse --show-toplevel 2>/dev/null)" || {
+  echo "check-dotfiles-safety: must run inside a git repo" >&2
+  exit 2
+}
+cd "$repo_root"
+
+# This guard is dotfiles-specific. Refuse to run from the wrong repo to avoid
+# surprising unrelated projects that happen to use the script.
+if [[ "${repo_root%/}" != "${XDG_CONFIG_HOME:-$HOME/.config}" ]]; then
+  echo "check-dotfiles-safety: expected dotfiles repo at \${XDG_CONFIG_HOME:-~/.config}, got: $repo_root" >&2
+  exit 2
+fi
+
+violations=()
+
+add_violation() {
+  violations+=("$1")
+}
+
+is_forbidden_path() {
+  local path="$1"
+
+  case "$path" in
+    # Local env/secrets. Keep .env.example tracked; block actual local env files.
+    .env|*.pem|*.key|*.p12|*.pfx|*_rsa|*_ed25519|*.agekey) return 0 ;;
+
+    # Common auth/cookie/session material.
+    *.credentials.json|*/.credentials.json|auth.json|*/auth.json|storage_state.json|*/storage_state.json|cookies.json|*/cookies.json|cookies.*.json|*/cookies.*.json) return 0 ;;
+
+    # Claude Code generated state/cache/history/auth.
+    claude/.claude.json|claude/history.jsonl|claude/projects/*|claude/cache/*|claude/paste-cache/*|claude/image-cache/*|claude/shell-snapshots/*|claude/backups/*|claude/file-history/*|claude/plans/*|claude/session-env/*|claude/downloads/*|claude/mcp-needs-auth-cache.json|claude/stats-cache.json) return 0 ;;
+
+    # Pi generated state/cache/history/package assets.
+    pi/agent/auth.json|pi/agent/run-history.jsonl|pi/agent/sessions/*|pi/agent/mcp-cache.json|pi/agent/mcp-npx-cache.json|pi/agent/trust.json|pi/agent/bin/*|pi/agent/npm/*|pi/agent/git/*) return 0 ;;
+
+    # Package/vendor/runtime/cache directories that should not be dotfiles.
+    node_modules/*|*/node_modules/*|__pycache__/*|*/__pycache__/*|.pytest_cache/*|*/.pytest_cache/*|dist/*|*/dist/*|build/*|*/build/*) return 0 ;;
+
+    # Browser/application profiles are state, not dotfiles.
+    BraveSoftware/*|google-chrome*/*|chromium/*|Chrome/*|Firefox/*) return 0 ;;
+  esac
+
+  return 1
+}
+
+# High-confidence secret content only. Avoid generic token/password patterns to
+# keep examples/templates usable.
+secret_regex='(-----BEGIN (RSA |DSA |EC |OPENSSH |PGP )?PRIVATE KEY-----|AWS_SECRET_ACCESS_KEY[[:space:]]*=[[:space:]]*[^[:space:]#]+|ANTHROPIC_API_KEY[[:space:]]*=[[:space:]]*[^[:space:]#]+|OPENAI_API_KEY[[:space:]]*=[[:space:]]*[^[:space:]#]+|GEMINI_API_KEY[[:space:]]*=[[:space:]]*[^[:space:]#]+|GOOGLE_API_KEY[[:space:]]*=[[:space:]]*[^[:space:]#]+|BWS_ACCESS_TOKEN[[:space:]]*=[[:space:]]*[^[:space:]#]+|sk-ant-[A-Za-z0-9_-]{20,}|sk-[A-Za-z0-9_-]{30,})'
+
+is_text_file() {
+  local path="$1"
+  [[ -f "$path" ]] || return 1
+  LC_ALL=C grep -Iq . "$path" 2>/dev/null
+}
+
+scan_worktree_content() {
+  local path="$1"
+  [[ -f "$path" ]] || return 0
+  is_text_file "$path" || return 0
+  if LC_ALL=C grep -En "$secret_regex" -- "$path" >/tmp/check-dotfiles-safety-grep.$$ 2>/dev/null; then
+    local first
+    first="$(head -n 1 /tmp/check-dotfiles-safety-grep.$$)"
+    rm -f /tmp/check-dotfiles-safety-grep.$$
+    add_violation "secret-like content in $path: $first"
+  else
+    rm -f /tmp/check-dotfiles-safety-grep.$$ 2>/dev/null || true
+  fi
+}
+
+scan_staged_content() {
+  local path="$1"
+  # Deleted files have no staged blob to scan.
+  git cat-file -e ":$path" 2>/dev/null || return 0
+  if git show --textconv ":$path" 2>/dev/null | LC_ALL=C grep -En "$secret_regex" >/tmp/check-dotfiles-safety-grep.$$ 2>/dev/null; then
+    local first
+    first="$(head -n 1 /tmp/check-dotfiles-safety-grep.$$)"
+    rm -f /tmp/check-dotfiles-safety-grep.$$
+    add_violation "secret-like staged content in $path: $first"
+  else
+    rm -f /tmp/check-dotfiles-safety-grep.$$ 2>/dev/null || true
+  fi
+}
+
+check_path_set() {
+  local label="$1"
+  local content_mode="$2"
+  local path
+  while IFS= read -r path; do
+    [[ -n "$path" ]] || continue
+    if is_forbidden_path "$path"; then
+      add_violation "forbidden $label path: $path"
+      continue
+    fi
+    case "$content_mode" in
+      staged) scan_staged_content "$path" ;;
+      worktree) scan_worktree_content "$path" ;;
+      none) ;;
+    esac
+  done
+}
+
+if [[ "$mode" == "staged" ]]; then
+  git diff --cached --name-only --diff-filter=ACMRT | check_path_set "staged" staged
+else
+  git diff --cached --name-only --diff-filter=ACMRT | check_path_set "staged" staged
+  git ls-files | check_path_set "tracked" worktree
+  git ls-files --others --exclude-standard | check_path_set "untracked" worktree
+fi
+
+if [[ "$audit_ignored" -eq 1 ]]; then
+  declare -A ignored_audit_counts=()
+  while IFS= read -r path; do
+    [[ -n "$path" ]] || continue
+    if is_forbidden_path "$path"; then
+      audit_key="$path"
+      case "$path" in
+        .env) audit_key=".env" ;;
+        BraveSoftware/*) audit_key="BraveSoftware/ (browser profile)" ;;
+        google-chrome*/*) audit_key="google-chrome*/ (browser profile)" ;;
+        chromium/*) audit_key="chromium/ (browser profile)" ;;
+        Cypress/cy/production/proxy/certs/*) audit_key="Cypress proxy certs/" ;;
+        Cypress/cy/production/proxy/keys/*) audit_key="Cypress proxy keys/" ;;
+        claude/.claude.json|claude/.credentials.json|claude/history.jsonl|claude/mcp-needs-auth-cache.json|claude/stats-cache.json) audit_key="$path" ;;
+        claude/projects/*) audit_key="claude/projects/" ;;
+        claude/cache/*) audit_key="claude/cache/" ;;
+        claude/paste-cache/*) audit_key="claude/paste-cache/" ;;
+        claude/image-cache/*) audit_key="claude/image-cache/" ;;
+        claude/shell-snapshots/*) audit_key="claude/shell-snapshots/" ;;
+        claude/backups/*) audit_key="claude/backups/" ;;
+        claude/file-history/*) audit_key="claude/file-history/" ;;
+        claude/plans/*) audit_key="claude/plans/" ;;
+        claude/session-env/*) audit_key="claude/session-env/" ;;
+        claude/downloads/*) audit_key="claude/downloads/" ;;
+        pi/agent/auth.json|pi/agent/mcp-cache.json|pi/agent/mcp-npx-cache.json|pi/agent/run-history.jsonl|pi/agent/trust.json) audit_key="$path" ;;
+        pi/agent/sessions/*) audit_key="pi/agent/sessions/" ;;
+        pi/agent/bin/*) audit_key="pi/agent/bin/" ;;
+        pi/agent/npm/*) audit_key="pi/agent/npm/" ;;
+        pi/agent/git/*) audit_key="pi/agent/git/" ;;
+        node_modules/*|*/node_modules/*) audit_key="node_modules/" ;;
+        __pycache__/*|*/__pycache__/*) audit_key="__pycache__/" ;;
+      esac
+      ignored_audit_counts[$audit_key]="$(( ${ignored_audit_counts[$audit_key]:-0} + 1 ))"
+    fi
+  done < <(git ls-files --others --ignored --exclude-standard)
+
+  if (( ${#ignored_audit_counts[@]} > 0 )); then
+    {
+      for audit_key in "${!ignored_audit_counts[@]}"; do
+        printf 'ignored: %s (%s)\n' "$audit_key" "${ignored_audit_counts[$audit_key]}"
+      done
+    } | sort >&2
+  fi
+fi
+
+if (( ${#violations[@]} > 0 )); then
+  echo "Dotfiles safety guard failed:" >&2
+  printf '  - %s\n' "${violations[@]}" >&2
+  echo >&2
+  echo "Fix by removing the file/content, moving state/cache/vendor assets out of ~/.config, or adding intentionally local generated files to the appropriate .gitignore." >&2
+  exit 1
+fi
+
+if [[ "$quiet" -eq 0 ]]; then
+  echo "ok"
+fi
