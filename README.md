@@ -100,17 +100,18 @@ REDMINE_PRIMARY_API_KEY=bws:REDMINE_PRIMARY_API_KEY
 REDMINE_SECONDARY_API_KEY=bws:REDMINE_SECONDARY_API_KEY
 ```
 
-Use the wrapper through `with-secrets`:
+Use the wrapper through `with-secrets`. Instance names are the keys configured in local `~/.config/redmine/config.json` — for example `EEA` and `EDW`, not necessarily the template names:
 
 ```sh
 with-secrets -- ~/.config/scripts/redmine.ts instances
-with-secrets -- ~/.config/scripts/redmine.ts issues list primary --directly-assigned-to-me --status open --limit 20
-with-secrets -- ~/.config/scripts/redmine.ts issue get primary 123 --include journals,attachments
-with-secrets -- ~/.config/scripts/redmine.ts issue create primary --project my-project --subject "Fix map legend" --description "..."
-with-secrets -- ~/.config/scripts/redmine.ts issue create primary --project my-project --subject "Fix map legend" --description "..." --execute
+with-secrets -- ~/.config/scripts/redmine.ts issues list EEA --directly-assigned-to-me --status open --limit 20
+with-secrets -- ~/.config/scripts/redmine.ts issue get EEA 123 --include journals,attachments
+with-secrets -- ~/.config/scripts/redmine.ts issue create EEA --project my-project --subject "Fix map legend" --description "..."
+# Only after explicit user approval for the exact dry-run payload:
+with-secrets -- ~/.config/scripts/redmine.ts issue create EEA --project my-project --subject "Fix map legend" --description "..." --execute
 ```
 
-Mutating commands are dry-run by default and require `--execute`. Use `--directly-assigned-to-me` for issues assigned to your user id only; Redmine's `assigned_to_id=me` may also include issues assigned to groups you belong to. The shared `redmine` skill tells agents how to use the wrapper safely.
+Mutating commands are dry-run by default and require `--execute`. Agents must show/summarize the dry-run payload and get explicit user approval before adding `--execute` for create, update, delete, or comment actions. Use `--directly-assigned-to-me` for issues assigned to your user id only; Redmine's `assigned_to_id=me` may also include issues assigned to groups you belong to. The shared `redmine` skill tells agents how to use the wrapper safely.
 
 ## Shell: zsh
 
