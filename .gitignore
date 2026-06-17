@@ -12,7 +12,6 @@
 # Files
 !/.env.example
 !/.gitignore
-!/.graphifyignore
 !/CONTEXT.md
 !/README.md
 !/KEYBINDINGS.md

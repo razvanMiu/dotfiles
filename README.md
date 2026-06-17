@@ -331,7 +331,6 @@ pi install npm:pi-sensitive-guard
 pi install git:github.com/elpapi42/pi-fork
 pi install npm:pi-mcp-adapter
 pi install npm:pi-rtk-optimizer
-pi install npm:graphify-pi
 ```
 
 Restart Pi after package changes.
@@ -352,80 +351,17 @@ context7 MCP  -> @upstash/context7-mcp@3.2.1
 serena MCP    -> git+https://github.com/oraios/serena@v1.5.3
 ```
 
-`context7` provides fresh library/API docs. `serena` provides semantic code navigation; Claude uses Serena's `claude-code` context while Pi uses Serena's generic `ide` context. Serena runs with `SERENA_HOME=${XDG_STATE_HOME:-$HOME/.local/state}/serena`; project metadata is configured in Serena's own state file to live under `~/.local/state/serena/projects/<project>/.serena` rather than inside each worktree. Accidental project-local `.serena/` data is generated state, ignored, and blocked by the dotfiles safety guard if force-staged. Serena reminder hooks are not enabled for now because the existing Graphify and safety hooks already modify Claude tool behavior.
+`context7` provides fresh library/API docs. `serena` provides semantic code navigation; Claude uses Serena's `claude-code` context while Pi uses Serena's generic `ide` context. Serena runs with `SERENA_HOME=${XDG_STATE_HOME:-$HOME/.local/state}/serena`; project metadata is configured in Serena's own state file to live under `~/.local/state/serena/projects/<project>/.serena` rather than inside each worktree. Accidental project-local `.serena/` data is generated state, ignored, and blocked by the dotfiles safety guard if force-staged. Serena reminder hooks are not enabled for now because the existing safety hooks already modify Claude tool behavior.
 
 Validation note: Context7 starts cleanly on stdio. Serena starts and exposes MCP tools. For the local `~/.config` project, generated `.serena/project.yml` is configured for TypeScript/JavaScript, Python, Go, C/C++, Bash, and Lua; the matching language-server commands are expected on `PATH`.
 
 MCP/tool routing rules:
 
-- Use Graphify first for project architecture, file relationships, cross-file navigation, and "where should I look?" questions when `graphify-out/graph.json` exists.
 - Use Serena for symbol-aware code navigation and safe semantic edits inside active code projects: symbol overview, find symbol, references, declarations, implementations, rename, and symbol-body replacement.
 - Use Context7 for fresh external library/API documentation before changing framework, package, or SDK usage.
 - Use Playwright for browser/UI validation, screenshots, accessibility snapshots, and interaction checks.
 
 Prefer standard shared MCP files such as `~/.config/mcp/mcp.json` only after deciding which servers should be cross-tool rather than Pi-specific.
-
-### Graphify
-
-Graphify maps project files into a queryable knowledge graph and wiki.
-
-Global CLI install:
-
-```sh
-uv tool install graphifyy
-```
-
-Shared Claude skill location:
-
-```text
-~/.config/agents/skills/graphify
-~/.config/claude/skills/graphify -> ../agents/skills/graphify
-```
-
-Pi integration is provided by `npm:graphify-pi`, which adds Pi graph-first guidance and a native `/graphify` command when `graphify-out/` exists.
-
-Current Obsidian AI knowledge vault:
-
-```text
-~/.local/share/obsidian/vaults/ai-knowledge
-```
-
-For this dotfiles repo, treat `graphify-out/` and `.graphify/` as generated local state. Keep them ignored and export only reviewed notes to the Obsidian vault. Other projects may choose to commit `graphify-out/` when team graph sharing is desired.
-
-The dotfiles corpus is constrained by:
-
-```text
-~/.config/.graphifyignore
-```
-
-That file excludes secrets, auth/session files, caches, browser profiles, package/vendor installs, Claude plugin checkouts, and generated Graphify output.
-
-Dotfiles Graphify workflow:
-
-```sh
-cd ~/.config
-# In Pi, prefer the Graphify skill / command so semantic extraction can use Pi-hosted agents.
-/graphify . --wiki --no-viz
-
-# Refresh Obsidian export after graph rebuilds or label changes.
-graphify export obsidian --dir ~/.local/share/obsidian/vaults/ai-knowledge/dotfiles-graph
-```
-
-After first generation, rename generic communities in `graphify-out/.graphify_labels.json`, then regenerate report/wiki/Obsidian export. Keep `graphify-out/` ignored.
-
-Useful query commands:
-
-```sh
-graphify query "Hard-boundary guard dotfiles safety guard"
-graphify query "scripts/check-dotfiles-safety"
-graphify query "scripts/claude-safety-hook"
-graphify query "Agent Config Boundaries"
-graphify query "Claude Code Adapter Canonical Cross-Agent Instructions"
-graphify explain "scripts/check-dotfiles-safety"
-graphify path "scripts/claude-safety-hook" "scripts/check-dotfiles-safety"
-```
-
-Prefer exact domain terms, file names, and community labels over broad questions. See `docs/graphify/query-guide.md` for query patterns and known anchors.
 
 ### Current Pi settings
 
@@ -567,8 +503,6 @@ pi install npm:pi-sensitive-guard
 pi install git:github.com/elpapi42/pi-fork
 pi install npm:pi-mcp-adapter
 pi install npm:pi-rtk-optimizer
-pi install npm:graphify-pi
-uv tool install graphifyy
 
 # 9. enable repo-local safety hook
 cd ~/.config

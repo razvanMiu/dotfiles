@@ -68,8 +68,7 @@ is_forbidden_path() {
     # Package/vendor/runtime/cache directories that should not be dotfiles.
     node_modules/*|*/node_modules/*|__pycache__/*|*/__pycache__/*|.pytest_cache/*|*/.pytest_cache/*|dist/*|*/dist/*|build/*|*/build/*) return 0 ;;
 
-    # Generated Graphify outputs stay local/ignored in this dotfiles repo.
-    graphify-out/*|*/graphify-out/*|.graphify/*|*/.graphify/*|.serena/*|*/.serena/*) return 0 ;;
+    .serena/*|*/.serena/*) return 0 ;;
 
     # Browser/application profiles are state, not dotfiles.
     BraveSoftware/*|google-chrome*/*|chromium/*|Chrome/*|Firefox/*) return 0 ;;
@@ -172,8 +171,6 @@ if [[ "$audit_ignored" -eq 1 ]]; then
         pi/agent/npm/*) audit_key="pi/agent/npm/" ;;
         pi/agent/git/*) audit_key="pi/agent/git/" ;;
         node_modules/*|*/node_modules/*) audit_key="node_modules/" ;;
-        graphify-out/*|*/graphify-out/*) audit_key="graphify-out/" ;;
-        .graphify/*|*/.graphify/*) audit_key=".graphify/" ;;
         .serena/*|*/.serena/*) audit_key=".serena/" ;;
         __pycache__/*|*/__pycache__/*) audit_key="__pycache__/" ;;
       esac

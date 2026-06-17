@@ -1,6 +1,6 @@
 ---
 name: ai-workflow
-description: Routes non-trivial coding, debugging, architecture, research, and UI tasks through Razvan's full AI stack: Graphify, Serena, Context7, Playwright, NotebookLM, subagents, and specialized skills. Use when the user asks for the full workflow, asks how to approach work, starts a non-trivial code task, or wants coordinated tool/skill usage.
+description: "Routes non-trivial coding, debugging, architecture, research, and UI tasks through Razvan's AI stack: Serena, Context7, Playwright, NotebookLM, subagents, and specialized skills. Use when the user asks for the full workflow, asks how to approach work, starts a non-trivial code task, or wants coordinated tool/skill usage."
 ---
 
 # AI Workflow
@@ -12,7 +12,7 @@ Use this as the orchestrator skill. It does not replace specialized skills; it d
 1. Clarify objective, constraints, and measurable acceptance criteria.
 2. Classify the task using the routing table below.
 3. Load the specialized skill(s) only when the task matches.
-4. Use the cheapest routing tool first, then narrow to files/symbols/docs/tests.
+4. Use the cheapest useful orientation step first, then narrow to files/symbols/docs/tests.
 5. Implement in a small vertical slice.
 6. Verify with concrete evidence.
 7. Finalize with project-specific checks and a concise summary.
@@ -21,7 +21,7 @@ Use this as the orchestrator skill. It does not replace specialized skills; it d
 
 | Task type | First move | Then use | Optional skill |
 | --- | --- | --- | --- |
-| Architecture, file relationships, where to look | `graphify query` when `graphify-out/graph.json` exists | `graphify path`, `graphify explain`, then read targeted files | graphify |
+| Architecture, file relationships, where to look | Inspect project docs/README/CONTEXT and use focused file search | Read targeted files, use Serena where language support exists | improve-codebase-architecture |
 | Symbol/code change | Serena symbol overview | `find_symbol`, `find_referencing_symbols`, focused edits/tests | tdd |
 | Library/framework/API change | Context7 docs | code_search/upstream source, tests/type checks | librarian |
 | UI/browser behavior | Playwright reproduce/snapshot | console/network/screenshot, fix, Playwright proof | diagnose |
@@ -34,10 +34,11 @@ Use this as the orchestrator skill. It does not replace specialized skills; it d
 
 ## Tool order rules
 
-- If `graphify-out/graph.json` exists and the question is about project structure, query Graphify before broad `rg`/`find`.
-- Use Serena after Graphify identifies likely code files, or directly for known symbols.
+- Use Serena for symbol-aware navigation when the project language server supports it.
+- Use targeted `rg`/`find`/project docs for broad orientation when symbols are unknown.
 - Use Context7 before changing fast-moving external APIs.
 - Use Playwright when the success criterion is visual, interactive, browser, console, or network behavior.
+- Use NotebookLM for video, paper, or large-source research synthesis.
 - Use subagents/forks for noisy scouting, independent review, test failure diagnosis, and architecture risk review.
 
 ## Finalization
@@ -57,12 +58,3 @@ scripts/check-dotfiles-safety --quiet
 ```
 
 Do not commit secrets, auth files, sessions, caches, generated state, browser profiles, or package/vendor installs.
-
-## Graphify refresh policy
-
-- `graphify query ...`: cheap; use anytime.
-- `graphify update`: use after meaningful code/doc changes when the graph should stay current.
-- Full `/graphify . --wiki --no-viz`: use after architecture-scale changes, large refactors, or before a major review.
-- Obsidian export/community relabel: only when the visual/wiki output matters.
-
-Do not run full Graphify after every small edit.

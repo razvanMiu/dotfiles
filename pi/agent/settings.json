@@ -14,11 +14,7 @@
     "npm:pi-sensitive-guard",
     "git:github.com/elpapi42/pi-fork",
     "npm:pi-mcp-adapter",
-    "npm:pi-rtk-optimizer",
-    {
-      "source": "npm:graphify-pi",
-      "skills": []
-    }
+    "npm:pi-rtk-optimizer"
   ],
   "hideThinkingBlock": true
 }

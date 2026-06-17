@@ -27,7 +27,7 @@ I am an experienced developer. Do not treat work as vibe coding.
 
 - Keep always-loaded instructions short.
 - Put reusable workflows in skills rather than large global prompts.
-- For non-trivial coding, debugging, architecture, UI, or research tasks, use the `ai-workflow` skill to route work through Graphify, Serena, Context7, Playwright, NotebookLM, subagents, and specialized skills as appropriate.
+- For non-trivial coding, debugging, architecture, UI, or research tasks, use the `ai-workflow` skill to route work through Serena, Context7, Playwright, NotebookLM, subagents, and specialized skills as appropriate.
 - Use subagents/forks for noisy or separable work:
   - codebase scouting
   - web/library research
