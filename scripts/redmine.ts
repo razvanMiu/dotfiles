@@ -3,6 +3,7 @@
 type InstanceConfig = { url: string; apiKeyEnv: string };
 type Config = { defaultInstance?: string; instances: Record<string, InstanceConfig> };
 type Args = string[];
+type RedmineCurrentUserResponse = { user?: { id?: number } };
 
 const CONFIG_PATH = process.env.REDMINE_CONFIG ?? `${process.env.XDG_CONFIG_HOME ?? `${process.env.HOME}/.config`}/redmine/config.json`;
 
@@ -55,7 +56,7 @@ function usage() {
 
 Commands:
   instances
-  issues list <instance> [--project ID] [--assigned-to me|ID] [--status open|closed|*|ID] [--limit N] [--query key=value]
+  issues list <instance> [--project ID] [--directly-assigned-to-me] [--assigned-to me|ID] [--status open|closed|*|ID] [--limit N] [--query key=value]
   issue get <instance> <id> [--include journals,attachments]
   issue create <instance> --project ID --subject TEXT [--description TEXT] [--tracker-id ID] [--priority-id ID] [--assigned-to-id ID] [--execute]
   issue update <instance> <id> [--status-id ID] [--assigned-to-id ID] [--subject TEXT] [--description TEXT] [--notes TEXT] [--execute]
@@ -118,7 +119,7 @@ function parseOptions(args: Args): Record<string, string | boolean | string[]> {
     const arg = args[i];
     if (!arg.startsWith("--")) throw new Error(`unexpected argument: ${arg}`);
     const key = arg.slice(2);
-    if (key === "execute" || key === "dry-run") {
+    if (key === "execute" || key === "dry-run" || key === "directly-assigned-to-me") {
       options[key] = true;
       continue;
     }
@@ -161,9 +162,15 @@ async function listIssues(args: Args) {
   const instanceName = args.shift();
   const [, instance] = resolveInstance(instanceName);
   const options = parseOptions(args);
+  if (options["directly-assigned-to-me"] && options["assigned-to"] !== undefined) {
+    throw new Error("use either --directly-assigned-to-me or --assigned-to, not both");
+  }
+  const assignedTo = options["directly-assigned-to-me"]
+    ? await currentUserId(instance)
+    : options["assigned-to"] as string | undefined;
   const params: Record<string, string | number | undefined> = {
     project_id: options.project as string | undefined,
-    assigned_to_id: options["assigned-to"] as string | undefined,
+    assigned_to_id: assignedTo,
     status_id: options.status as string | undefined,
     limit: maybeNumber(options.limit) ?? 25,
   };
@@ -173,6 +180,13 @@ async function listIssues(args: Args) {
     params[key] = rest.join("=");
   }
   console.log(JSON.stringify(await redmineFetch(instance, "GET", appendQuery("/issues.json", params)), null, 2));
+}
+
+async function currentUserId(instance: InstanceConfig): Promise<number> {
+  const data = await redmineFetch(instance, "GET", "/users/current.json") as RedmineCurrentUserResponse;
+  const id = data.user?.id;
+  if (!Number.isInteger(id)) throw new Error("/users/current.json did not return user.id");
+  return id;
 }
 
 async function getIssue(args: Args) {

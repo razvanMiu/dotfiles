@@ -104,13 +104,13 @@ Use the wrapper through `with-secrets`:
 
 ```sh
 with-secrets -- ~/.config/scripts/redmine.ts instances
-with-secrets -- ~/.config/scripts/redmine.ts issues list primary --assigned-to me --status open --limit 20
+with-secrets -- ~/.config/scripts/redmine.ts issues list primary --directly-assigned-to-me --status open --limit 20
 with-secrets -- ~/.config/scripts/redmine.ts issue get primary 123 --include journals,attachments
 with-secrets -- ~/.config/scripts/redmine.ts issue create primary --project my-project --subject "Fix map legend" --description "..."
 with-secrets -- ~/.config/scripts/redmine.ts issue create primary --project my-project --subject "Fix map legend" --description "..." --execute
 ```
 
-Mutating commands are dry-run by default and require `--execute`. The shared `redmine` skill tells agents how to use the wrapper safely.
+Mutating commands are dry-run by default and require `--execute`. Use `--directly-assigned-to-me` for issues assigned to your user id only; Redmine's `assigned_to_id=me` may also include issues assigned to groups you belong to. The shared `redmine` skill tells agents how to use the wrapper safely.
 
 ## Shell: zsh
 

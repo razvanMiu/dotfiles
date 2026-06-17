@@ -31,7 +31,7 @@ Typical commands:
 
 ```sh
 with-secrets -- ~/.config/scripts/redmine.ts instances
-with-secrets -- ~/.config/scripts/redmine.ts issues list primary --assigned-to me --status open --limit 20
+with-secrets -- ~/.config/scripts/redmine.ts issues list primary --directly-assigned-to-me --status open --limit 20
 with-secrets -- ~/.config/scripts/redmine.ts issue get primary 123 --include journals,attachments
 with-secrets -- ~/.config/scripts/redmine.ts issue create primary --project my-project --subject "Fix map legend" --description "..."
 with-secrets -- ~/.config/scripts/redmine.ts issue create primary --project my-project --subject "Fix map legend" --description "..." --execute
@@ -43,4 +43,5 @@ with-secrets -- ~/.config/scripts/redmine.ts issue comment primary 123 --notes "
 - Use `triage` for incoming issue classification and acceptance criteria.
 - Use `to-issues` for breaking plans into Redmine tickets.
 - Use `ai-workflow` for implementation, then add a Redmine comment with validation evidence.
+- Prefer `--directly-assigned-to-me` over `--assigned-to me` when the user asks for their own queue, because Redmine's `me` filter can include group-assigned issues.
 - Prefer linking commits, test output, screenshots, or concise reproduction notes in Redmine comments.
