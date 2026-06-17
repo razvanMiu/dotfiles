@@ -70,6 +70,48 @@ See also:
 ~/.config/docs/adr/0001-dotfiles-wide-secret-loader.md
 ```
 
+## Redmine API workflow
+
+Redmine integration uses the official REST API directly through a small local wrapper, not a Redmine MCP server or third-party CLI. The current Redmine API supports JSON endpoints such as `/issues.json`, `/issues/:id.json`, and API-key authentication via `X-Redmine-API-Key`; the REST API must be enabled on the Redmine server.
+
+Tracked template:
+
+```text
+~/.config/redmine/config.example.json
+```
+
+Local instance config, never committed:
+
+```text
+~/.config/redmine/config.json
+```
+
+Create local config:
+
+```sh
+cp ~/.config/redmine/config.example.json ~/.config/redmine/config.json
+$EDITOR ~/.config/redmine/config.json
+```
+
+Store API keys only in the local env/Bitwarden flow, for example:
+
+```dotenv
+REDMINE_PRIMARY_API_KEY=bws:REDMINE_PRIMARY_API_KEY
+REDMINE_SECONDARY_API_KEY=bws:REDMINE_SECONDARY_API_KEY
+```
+
+Use the wrapper through `with-secrets`:
+
+```sh
+with-secrets -- ~/.config/scripts/redmine.ts instances
+with-secrets -- ~/.config/scripts/redmine.ts issues list primary --assigned-to me --status open --limit 20
+with-secrets -- ~/.config/scripts/redmine.ts issue get primary 123 --include journals,attachments
+with-secrets -- ~/.config/scripts/redmine.ts issue create primary --project my-project --subject "Fix map legend" --description "..."
+with-secrets -- ~/.config/scripts/redmine.ts issue create primary --project my-project --subject "Fix map legend" --description "..." --execute
+```
+
+Mutating commands are dry-run by default and require `--execute`. The shared `redmine` skill tells agents how to use the wrapper safely.
+
 ## Shell: zsh
 
 Tracked zsh config lives in:
@@ -484,10 +526,13 @@ git clone https://github.com/zsh-users/zsh-syntax-highlighting.git ~/.local/shar
 
 # 4. expose dotfile-managed scripts
 ln -sfn ~/.config/scripts/with-secrets.ts ~/.local/bin/with-secrets
+ln -sfn ~/.config/scripts/redmine.ts ~/.local/bin/redmine
 
-# 5. create local env from the tracked template
+# 5. create local env/config from tracked templates
 cp ~/.config/.env.example ~/.config/.env
+cp ~/.config/redmine/config.example.json ~/.config/redmine/config.json
 $EDITOR ~/.config/.env
+$EDITOR ~/.config/redmine/config.json
 
 # 6. install bws as a user binary on PATH, e.g. ~/.local/bin/bws
 

@@ -30,7 +30,8 @@ Use this as the orchestrator skill. It does not replace specialized skills; it d
 | Architecture/design decision | Interview and inspect docs | update CONTEXT.md/ADR if warranted | grill-with-docs |
 | Video/paper/large-source research | NotebookLM notebook/sources | synthesize into docs/issues | notebooklm |
 | Prototype/state-machine/UI options | Throwaway prototype | compare options, discard or promote | prototype |
-| Planning into PRD/issues | Clarify scope | publish PRD/issues | to-prd, to-issues, triage |
+| Planning into PRD/issues | Clarify scope | publish PRD/issues or Redmine tickets | to-prd, to-issues, triage, redmine |
+| Issue tracker lookup/update | Use redmine skill and local wrapper | summarize, create, update, comment with evidence | redmine, triage |
 
 ## Tool order rules
 
@@ -39,6 +40,7 @@ Use this as the orchestrator skill. It does not replace specialized skills; it d
 - Use Context7 before changing fast-moving external APIs.
 - Use Playwright when the success criterion is visual, interactive, browser, console, or network behavior.
 - Use NotebookLM for video, paper, or large-source research synthesis.
+- Use the redmine skill for issue tracker lookup, creation, updates, and evidence comments.
 - Use subagents/forks for noisy scouting, independent review, test failure diagnosis, and architecture risk review.
 
 ## Finalization

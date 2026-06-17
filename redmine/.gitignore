@@ -1,0 +1,4 @@
+# Keep instance URLs/API-key env names local unless explicitly promoted.
+*
+!.gitignore
+!config.example.json

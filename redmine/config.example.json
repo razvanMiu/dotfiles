@@ -1,0 +1,13 @@
+{
+  "defaultInstance": "primary",
+  "instances": {
+    "primary": {
+      "url": "https://redmine-primary.example.com",
+      "apiKeyEnv": "REDMINE_PRIMARY_API_KEY"
+    },
+    "secondary": {
+      "url": "https://redmine-secondary.example.com",
+      "apiKeyEnv": "REDMINE_SECONDARY_API_KEY"
+    }
+  }
+}
