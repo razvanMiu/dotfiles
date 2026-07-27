@@ -17,7 +17,7 @@ func command(ctx context.Context, name string, args ...string) ([]byte, error) {
 func New(stateDir string) []status.Segment {
 	return []status.Segment{
 		NewCPU(command, 2*time.Second),
-		NewGPU(command, 2*time.Second),
+		// NewGPU(command, 2*time.Second),
 		NewRAM(2 * time.Second),
 		NewVolume(command, 2*time.Second),
 		NewTime(30 * time.Second),

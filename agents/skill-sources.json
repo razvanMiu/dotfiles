@@ -5,19 +5,28 @@
       "repo": "git@github.com:mattpocock/skills.git",
       "ref": "",
       "skills": [
-        { "path": "skills/engineering/diagnose" },
+        { "path": "skills/engineering/ask-mat" },
+        { "path": "skills/engineering/code-review" },
+        { "path": "skills/engineering/codebase-design" },
+        { "path": "skills/engineering/diagnosing-bugs" },
+        { "path": "skills/engineering/domain-modeling" },
         { "path": "skills/engineering/grill-with-docs" },
+        { "path": "skills/engineering/implement" },
         { "path": "skills/engineering/improve-codebase-architecture" },
         { "path": "skills/engineering/prototype" },
+        { "path": "skills/engineering/research" },
+        { "path": "skills/engineering/resolving-merge-conflicts" },
+        { "path": "skills/engineering/setup-matt-pocock-skills" },
         { "path": "skills/engineering/tdd" },
-        { "path": "skills/engineering/to-issues" },
-        { "path": "skills/engineering/to-prd" },
+        { "path": "skills/engineering/to-spec" },
+        { "path": "skills/engineering/to-tickets" },
         { "path": "skills/engineering/triage" },
-        { "path": "skills/engineering/zoom-out" },
-        { "path": "skills/productivity/caveman" },
+        { "path": "skills/engineering/wayfinder" },
         { "path": "skills/productivity/grill-me" },
+        { "path": "skills/productivity/grilling" },
         { "path": "skills/productivity/handoff" },
-        { "path": "skills/productivity/write-a-skill" }
+        { "path": "skills/productivity/teach" },
+        { "path": "skills/productivity/writing-great-skills" }
       ]
     }
   ]
