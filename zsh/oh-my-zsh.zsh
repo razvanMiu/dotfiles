@@ -3,6 +3,7 @@ export ZSH="$XDG_DATA_HOME/oh-my-zsh"
 export ZSH_CUSTOM="$XDG_CONFIG_HOME/zsh/oh-my-zsh"
 export ZSH_CACHE_DIR="$XDG_CACHE_HOME/oh-my-zsh"
 export ZSH_COMPDUMP="$ZSH_CACHE_DIR/.zcompdump-$HOST"
+export ZSH_HISTORY_FILE="$XDG_STATE_HOME/oh-my-zsh/history"
 
 # Theme
 ZSH_THEME="eastwood"
@@ -12,7 +13,7 @@ plugins=(
   git
   zsh-autosuggestions
   zsh-syntax-highlighting
-  vi-mode
+  # vi-mode
 )
 
 # zsh-autosuggestions

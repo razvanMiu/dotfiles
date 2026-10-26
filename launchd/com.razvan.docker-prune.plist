@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.razvan.docker-prune</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/Users/razvan/.config/scripts/docker-prune</string>
+    </array>
+    <!-- launchd does not source shell config; pin the env the script needs. -->
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+        <key>DOCKER_CONFIG</key>
+        <string>/Users/razvan/.config/docker</string>
+        <key>COLIMA_HOME</key>
+        <string>/Users/razvan/.local/state/colima</string>
+    </dict>
+    <key>StartCalendarInterval</key>
+    <dict>
+        <key>Weekday</key>
+        <integer>0</integer>
+        <key>Hour</key>
+        <integer>4</integer>
+        <key>Minute</key>
+        <integer>0</integer>
+    </dict>
+    <key>StandardOutPath</key>
+    <string>/Users/razvan/.local/state/docker-prune.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Users/razvan/.local/state/docker-prune.log</string>
+</dict>
+</plist>

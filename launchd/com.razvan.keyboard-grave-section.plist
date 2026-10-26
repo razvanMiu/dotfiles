@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.razvan.keyboard-grave-section</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/usr/bin/hidutil</string>
+        <string>property</string>
+        <string>--matching</string>
+        <string>{"VendorID":1452,"Product":"Apple Internal Keyboard / Trackpad","PrimaryUsagePage":1,"PrimaryUsage":6}</string>
+        <string>--set</string>
+        <!-- Keyboard usages: grave/tilde (0x35) and the extra ISO key (0x64). -->
+        <string>{"UserKeyMapping":[{"HIDKeyboardModifierMappingSrc":30064771125,"HIDKeyboardModifierMappingDst":30064771172},{"HIDKeyboardModifierMappingSrc":30064771172,"HIDKeyboardModifierMappingDst":30064771125}]}</string>
+    </array>
+    <key>RunAtLoad</key>
+    <true/>
+</dict>
+</plist>

@@ -22,8 +22,10 @@
 !/docs/
 !/dunst/
 !/dwm/
+!/ghostty/
 !/git/
 !/kitty/
+!/launchd/
 !/lazygit/
 !/nvim/
 !/pi/
@@ -31,6 +33,7 @@
 !/redmine/
 !/rofi/
 !/scripts/
+!/services/
 !/st/
 !/tmux/
 !/X11/

@@ -1,7 +1,7 @@
 {
-  "lastChangelogVersion": "0.81.1",
-  "defaultProvider": "openai-codex",
-  "defaultModel": "gpt-5.6-sol",
+  "lastChangelogVersion": "1.4.0",
+  "defaultProvider": "openai",
+  "defaultModel": "gpt-6.1-sol",
   "defaultThinkingLevel": "high",
   "enableSkillCommands": true,
   "skills": [
@@ -12,10 +12,29 @@
     "npm:pi-subagents",
     "npm:pi-observational-memory",
     "npm:pi-sensitive-guard",
-    "git:github.com/elpapi42/pi-fork",
-    "npm:pi-mcp-adapter",
-    "npm:pi-rtk-optimizer"
+    "npm:pi-ollama-cloud",
+    "npm:pi-provider-litellm",
+    "npm:pi-antigravity",
+    "npm:@marckrenn/pi-sub-bar"
   ],
   "hideThinkingBlock": false,
-  "theme": "dark"
+  "theme": "dark",
+  "extensions": [
+    "+builtin:mcp"
+  ],
+  "litellm": {
+    "mcp": {
+      "enabled": false
+    },
+    "skills": {
+      "enabled": false
+    },
+    "budget": {
+      "enabled": false
+    }
+  },
+  "deviceId": "0cd85e3f-6f52-4f86-841f-7f6282b4a9b1",
+  "mcp": {
+    "enabled": false
+  }
 }

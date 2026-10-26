@@ -1,0 +1,39 @@
+#!/usr/bin/env bash
+# docker-prune — reclaim Docker/colima VM storage before it piles up.
+#
+# safe (default): stopped containers, dangling images, build cache older
+#                 than 72h
+# -a / --aggressive: also remove unused images older than 7 days
+#
+# Volumes are never auto-pruned; they are listed at the end for manual review.
+# Works against any reachable docker daemon (colima context on macOS,
+# native docker on Linux).
+set -euo pipefail
+
+MODE="safe"
+if [[ "${1:-}" == "-a" || "${1:-}" == "--aggressive" ]]; then
+  MODE="aggressive"
+fi
+
+summary() {
+  # plain table: CLI 29 exposes anonymous struct fields to --format, which is unusable
+  docker system df
+}
+
+echo "docker-prune $(date '+%Y-%m-%d %H:%M:%S') mode=$MODE"
+echo "before:"
+summary
+
+docker container prune -f >/dev/null
+docker image prune -f >/dev/null
+docker builder prune -f --filter until=72h >/dev/null
+
+if [[ "$MODE" == "aggressive" ]]; then
+  docker image prune -a -f --filter until=168h >/dev/null
+fi
+
+echo "after:"
+summary
+echo
+echo "volumes (manual review - never auto-pruned):"
+docker volume ls --format 'table {{.Name}}\t{{.Driver}}\t{{.Scope}}'

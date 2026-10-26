@@ -1,0 +1,64 @@
+name: devservices
+
+# Shared dev stack. Storage is bind-mounted under $XDG_STATE_HOME/services
+# (visible on the host, survives colima re-provisioning). See README.md.
+
+services:
+  redis:
+    image: redis:8.10
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:6379:6379"
+    volumes:
+      - ${XDG_STATE_HOME:?set XDG_STATE_HOME}/services/redis:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  # mariadb is matomo's database: Matomo officially supports only
+  # MySQL/MariaDB (no Postgres, and none planned). No host port — it exists
+  # for matomo only. The ./services helper ties its lifecycle to matomo.
+  mariadb:
+    image: mariadb:11.8
+    restart: unless-stopped
+    environment:
+      # Required at first init: the entrypoint refuses to start an
+      # uninitialized data dir without a root password option. A random
+      # throwaway root keeps root effectively locked; Matomo connects as
+      # its own user below.
+      MARIADB_RANDOM_ROOT_PASSWORD: "1"
+      MARIADB_DATABASE: ${MATOMO_DB_NAME:-matomo}
+      MARIADB_USER: ${MATOMO_DB_USER:-matomo}
+      MARIADB_PASSWORD: ${MATOMO_DB_PASSWORD:?set MATOMO_DB_PASSWORD in .env}
+    volumes:
+      - ${XDG_STATE_HOME:?set XDG_STATE_HOME}/services/mariadb:/var/lib/mysql
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "healthcheck.sh",
+          "--su-mysql",
+          "--connect",
+          "--innodb_initialized",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  matomo:
+    image: matomo:5.14.0-apache
+    restart: unless-stopped
+    depends_on:
+      mariadb:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:8090:80"
+    environment:
+      MATOMO_DATABASE_HOST: mariadb
+      MATOMO_DATABASE_NAME: ${MATOMO_DB_NAME:-matomo}
+      MATOMO_DATABASE_USER: ${MATOMO_DB_USER:-matomo}
+      MATOMO_DATABASE_PASSWORD: ${MATOMO_DB_PASSWORD:?set MATOMO_DB_PASSWORD in .env}
+    volumes:
+      - ${XDG_STATE_HOME:?set XDG_STATE_HOME}/services/matomo:/var/www/html

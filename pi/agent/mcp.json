@@ -1,7 +1,4 @@
 {
-  "settings": {
-    "toolPrefix": "short"
-  },
   "mcpServers": {
     "playwright": {
       "command": "npx",

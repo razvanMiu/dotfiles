@@ -25,9 +25,23 @@ export EDITOR=nvim
 export npm_config_cache="$XDG_CACHE_HOME/npm"
 export npm_config_logs_dir="$XDG_STATE_HOME/npm/logs"
 
+# RubyGems
+export GEM_HOME="$XDG_DATA_HOME/gem"
+export GEM_PATH="$GEM_HOME:$HOME/.gem"
+
+# uv python
+export UV_PYTHON_PREFERENCE=managed
+
 # Claude Code
 export CLAUDE_CONFIG_DIR="$XDG_CONFIG_HOME/claude"
 
 # Pi coding agent
 export PI_CODING_AGENT_DIR="$XDG_CONFIG_HOME/pi/agent"
 export PI_CODING_AGENT_SESSION_DIR="$XDG_STATE_HOME/pi/sessions"
+
+# kubectl
+export KUBECONFIG="$XDG_STATE_HOME/kube/config"
+
+# Docker (colima runtime)
+export COLIMA_HOME="$XDG_STATE_HOME/colima"
+export DOCKER_CONFIG="$XDG_CONFIG_HOME/docker"

@@ -210,6 +210,42 @@ The guard checks staged files, tracked files, and untracked non-ignored files fo
 scripts/check-dotfiles-safety --audit-ignored
 ```
 
+## Docker (colima)
+
+Docker workloads run in a Colima VM (MIT, ThoughtWorks Technology Radar
+"Adopt"), not Docker Desktop. The `docker` CLI and the compose plugin come
+from Homebrew; compose is wired in as a docker CLI plugin.
+
+| Item | Location |
+|---|---|
+| Colima VM state (disk image) | `~/.local/state/colima` via `COLIMA_HOME` |
+| Docker client config/contexts | `~/.config/docker` via `DOCKER_CONFIG` |
+| Compose/buildx plugins | `~/.config/docker/cli-plugins/` → Homebrew binaries |
+| Weekly prune log | `~/.local/state/docker-prune.log` |
+
+`zsh/env.zsh` exports `COLIMA_HOME` and `DOCKER_CONFIG`. **Colima quirk
+(v0.10.3):** `$COLIMA_HOME` is honored only if the directory already exists,
+otherwise it silently falls back to `$XDG_CONFIG_HOME/colima` — run
+`mkdir -p ~/.local/state/colima` before the first `colima start` on a new
+machine.
+
+Fresh machine:
+
+```sh
+brew install colima docker docker-compose docker-buildx
+mkdir -p ~/.local/state/colima
+mkdir -p ~/.config/docker/cli-plugins
+ln -sfn "$(brew --prefix)/opt/docker-compose/bin/docker-compose" ~/.config/docker/cli-plugins/docker-compose
+ln -sfn "$(brew --prefix)/opt/docker-buildx/bin/docker-buildx" ~/.config/docker/cli-plugins/docker-buildx
+colima start --disk 60 --cpu 4 --memory 8
+```
+
+The VM disk is capped at 60 GiB and is a single visible file
+(`~/.local/state/colima/_lima/colima/disk`). Manage it with
+`docker system df -v` and `scripts/docker-prune`, which the
+`com.razvan.docker-prune` launch agent runs weekly (see
+`launchd/README.md`).
+
 ## Agent configuration
 
 Shared, tool-neutral agent resources live in:
@@ -353,8 +389,9 @@ Do not commit Pi runtime/secrets. The local ignore file excludes:
 ~/.config/pi/agent/bin/
 ~/.config/pi/agent/npm/
 ~/.config/pi/agent/git/
-~/.config/pi/agent/mcp-cache.json
-~/.config/pi/agent/mcp-npx-cache.json
+~/.config/pi/agent/mcp-auth.json
+~/.config/pi/agent/mcp.log*
+~/.config/pi/agent/models-store.json
 ~/.config/pi/agent/run-history.jsonl
 ~/.config/pi/agent/trust.json
 *.log
@@ -364,23 +401,28 @@ Pi currently hardcodes user-installed extension packages under `PI_CODING_AGENT_
 
 ### Install Pi packages
 
-Current recommended package stack:
+Current package baseline (audited against Pi 1.2.0):
 
 ```sh
 pi install npm:pi-web-access
 pi install npm:pi-subagents
 pi install npm:pi-observational-memory
 pi install npm:pi-sensitive-guard
-pi install git:github.com/elpapi42/pi-fork
-pi install npm:pi-mcp-adapter
-pi install npm:pi-rtk-optimizer
 ```
 
-Restart Pi after package changes.
+Restart Pi after package changes; removing a package does not unload its code from an already-running session.
+
+`pi-subagents` supports both fresh and forked context. The standalone `pi-fork` package is excluded because its child-completion handling does not match Pi 1.2's settled lifecycle and its child usage is not included in native accounting. `pi-rtk-optimizer` is excluded because semantic output filtering can discard diagnostics and replacement results can lose structured output. Pi's native output truncation remains available.
+
+`pi-observational-memory` remains optional for long sessions and makes background model calls. `pi-sensitive-guard` is retained conditionally: its declared peer range does not include Pi 1.2, it does not cover every tool, and project-level overrides can weaken protection. Treat it as an accidental-access guard, not a sandbox; prefer hard blocking of protected shell reads over output redaction.
 
 ### Pi MCP baseline
 
-Pi uses `pi-mcp-adapter`. Keep global Pi MCP config in:
+Pi uses built-in MCP, explicitly enabled with `"extensions": ["+builtin:mcp"]` in `settings.json`. `pi-mcp-adapter` is not installed. This keeps MCP integration aligned with Pi releases and lets permission extensions observe individual MCP tool calls rather than proxy calls. Native MCP already supports on-demand tool discovery; the trade-off is that every enabled server starts in the background and stays running for the session instead of being stopped when idle.
+
+Use `/mcp` for in-session status and reconnects, and `pi mcp list --json` for a native connection check outside a session. Servers use default `codemode` exposure: Pi activates codemode automatically, and scripts can discover tools with `searchTools()` and inspect them with `describeTool()`. Native tool names use `mcp__<server>__<tool>`. Restart Pi after changing the MCP implementation; an existing session may still contain the old adapter code and tool declarations.
+
+Keep global Pi MCP config in:
 
 ```text
 ~/.config/pi/agent/mcp.json
@@ -396,7 +438,9 @@ serena MCP    -> git+https://github.com/oraios/serena@v1.5.3
 
 `context7` provides fresh library/API docs. `serena` provides semantic code navigation; Claude uses Serena's `claude-code` context while Pi uses Serena's generic `ide` context. Serena runs with `SERENA_HOME=${XDG_STATE_HOME:-$HOME/.local/state}/serena`; project metadata is configured in Serena's own state file to live under `~/.local/state/serena/projects/<project>/.serena` rather than inside each worktree. Accidental project-local `.serena/` data is generated state, ignored, and blocked by the dotfiles safety guard if force-staged. Serena reminder hooks are not enabled for now because the existing safety hooks already modify Claude tool behavior.
 
-Validation note: Context7 starts cleanly on stdio. Serena starts and exposes MCP tools. For the local `~/.config` project, generated `.serena/project.yml` is configured for TypeScript/JavaScript, Python, Go, C/C++, Bash, and Lua; the matching language-server commands are expected on `PATH`.
+Fresh-machine prerequisites on both macOS and Linux: Node.js 22.19+ with `npx` for Playwright/Context7, and `uv` with its `uvx` executable for Serena. Check these in the shell that launches Pi; the Serena wrapper also needs `uvx` available through `sh -lc`. Install missing dependencies deliberately rather than assuming another machine's setup carries over. Playwright additionally needs its configured Chromium browser available.
+
+On macOS, install `uv` through Homebrew (`brew install uv`); keep Homebrew's supported prefix rather than relocating it into XDG data. uv itself follows XDG storage conventions on macOS and Linux. On the rebuilt Mac, `uv` and `uvx` are available through `sh -lc`. Native MCP connection checks pass for all three servers, and read-only tool calls pass for Context7 (`resolve-library-id`) and Serena (`initial_instructions`). This does not yet validate Serena's project language servers. Playwright's matching Chrome-for-Testing browser is installed in the standard macOS cache (`~/Library/Caches/ms-playwright/`); native MCP smoke tests passed for navigation to `about:blank`, DOM evaluation, and browser close. On a fresh machine, install it deliberately with `npx -y @playwright/mcp@0.0.76 install-browser chrome-for-testing`. Playwright uses its platform-default browser cache; no browser-path override is configured. Previous-machine validation does not establish readiness after a reinstall. For semantic navigation, the matching project language-server commands must also be on `PATH`.
 
 MCP/tool routing rules:
 
@@ -413,9 +457,12 @@ Prefer standard shared MCP files such as `~/.config/mcp/mcp.json` only after dec
 ```json
 {
   "enableSkillCommands": true,
-  "skills": ["../../agents/skills"]
+  "skills": ["../../agents/skills"],
+  "extensions": ["+builtin:mcp"]
 }
 ```
+
+Model defaults do not supply authentication. After rebuilding a machine, run `/login` in Pi and choose the appropriate provider, then `/model` to choose a model. Alternatively, launch through `with-secrets -- pi` when using API keys from the local secrets workflow. A non-secret credential check is `pi auth check --provider openai --json --no-refresh`; do not use credential-printing commands for diagnostics.
 
 `~/.agents -> ~/.config/agents` is still created for tools that understand the shared agent convention.
 
@@ -541,19 +588,23 @@ $EDITOR ~/.config/redmine/config.json
 ln -sfn ~/.config/agents ~/.agents
 ~/.config/scripts/update-agent-skills.sh
 
-# 8. install Pi packages
+# 8. install Pi packages (Node.js/npx required; Serena also needs uv/uvx)
 pi install npm:pi-web-access
 pi install npm:pi-subagents
 pi install npm:pi-observational-memory
 pi install npm:pi-sensitive-guard
-pi install git:github.com/elpapi42/pi-fork
-pi install npm:pi-mcp-adapter
-pi install npm:pi-rtk-optimizer
 
 # 9. enable repo-local safety hook
 cd ~/.config
 git config core.hooksPath git/hooks
 scripts/check-dotfiles-safety
+
+# 10. docker via colima (optional; see the Docker (colima) section)
+brew install colima docker docker-compose docker-buildx
+mkdir -p ~/.local/state/colima ~/.config/docker/cli-plugins
+ln -sfn "$(brew --prefix)/opt/docker-compose/bin/docker-compose" ~/.config/docker/cli-plugins/docker-compose
+ln -sfn "$(brew --prefix)/opt/docker-buildx/bin/docker-buildx" ~/.config/docker/cli-plugins/docker-buildx
+colima start --disk 60 --cpu 4 --memory 8
 ```
 
 ## Commit workflow

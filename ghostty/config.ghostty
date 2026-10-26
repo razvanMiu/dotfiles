@@ -1,0 +1,11 @@
+# JetBrains Mono Nerd Font (ligatures on; switch to "JetBrainsMonoNL Nerd Font Mono" to disable ligatures).
+# font-size = 14
+font-family = "JetBrainsMono Nerd Font Mono"
+
+# Toggle the dropdown terminal globally with Option (Opt) + grave (`).
+keybind = global:alt+backquote=toggle_quick_terminal
+
+# Keep the dropdown visible (floating above other windows) when focus shifts
+# to another app, instead of auto-hiding. It only closes on the toggle key.
+# (Default on macOS is true, which is why it disappeared when you clicked away.)
+quick-terminal-autohide = false

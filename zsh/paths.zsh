@@ -1,5 +1,5 @@
 # Tool install roots
-export BUN_INSTALL="$HOME/.bun"
+export BUN_INSTALL="$XDG_DATA_HOME/bun"
 export VOLTA_HOME="$XDG_DATA_HOME/volta"
 
 # PATH

@@ -1,0 +1,60 @@
+#!/usr/bin/env bash
+# services — manage the shared dev stack defined in this directory.
+#
+# Usage:
+#   ./services up [service ...]     start (matomo implies mariadb)
+#   ./services stop [service ...]   stop (matomo implies mariadb; no args = all)
+#   ./services logs [service ...]   follow logs (no args = all)
+#   ./services status               container overview
+#
+# Lifecycle tie: compose depends_on starts mariadb when matomo starts but
+# does NOT stop it when matomo stops. This helper expands the matomo target
+# to "matomo mariadb" for up and stop, so the DB follows matomo's lifecycle.
+# redis is an independent shared service.
+set -euo pipefail
+cd "$(dirname "$0")"
+
+export XDG_STATE_HOME="${XDG_STATE_HOME:-$HOME/.local/state}"
+export DOCKER_CONFIG="${DOCKER_CONFIG:-$HOME/.config/docker}"
+
+STORAGE="$XDG_STATE_HOME/services"
+ALL="redis mariadb matomo"
+
+expand() {
+  local out=()
+  local t
+  for t in "$@"; do
+    if [[ "$t" == "matomo" ]]; then
+      out+=("matomo" "mariadb")
+    else
+      out+=("$t")
+    fi
+  done
+  printf '%s\n' "${out[@]}" | awk '!seen[$0]++'
+}
+
+cmd="${1:-status}"
+shift || true
+
+case "$cmd" in
+  up)
+    mkdir -p "$STORAGE/mariadb" "$STORAGE/matomo" "$STORAGE/redis"
+    if [[ $# -eq 0 ]]; then set -- $ALL; fi
+    docker compose up -d $(expand "$@")
+    ;;
+  stop)
+    if [[ $# -eq 0 ]]; then set -- $ALL; fi
+    docker compose stop $(expand "$@")
+    ;;
+  logs)
+    if [[ $# -eq 0 ]]; then set -- $ALL; fi
+    docker compose logs -f "$@"
+    ;;
+  status|ps)
+    docker compose ps
+    ;;
+  *)
+    echo "usage: $0 {up|stop|logs|status} [service ...]" >&2
+    exit 1
+    ;;
+esac

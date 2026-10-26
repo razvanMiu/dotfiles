@@ -10,6 +10,11 @@ This file is the high-level keyboard contract for Razvan's desktop. Keep detaile
 - **Shift**: stronger or resizing variant of an existing action.
 - **Ctrl**: alternate/fallback variant when a namespace needs one.
 
+## macOS / Ghostty
+
+- **Ctrl + grave (`)**: toggle Ghostty's global dropdown terminal; configured in `ghostty/config.ghostty`.
+- A login agent in `launchd/` configures the section/grave key swap system-wide for the MacBook's built-in keyboard. On newer macOS, `hidutil` may need Input Monitoring approval; verify actual typing after granting it. External keyboards and the FileVault/pre-login keyboard are unchanged. See [permission, installation, and undo instructions](launchd/README.md).
+
 ## Global / dwm
 
 Opt is dwm's `MODKEY`.
