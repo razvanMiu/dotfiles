@@ -25,6 +25,12 @@ export EDITOR=nvim
 export npm_config_cache="$XDG_CACHE_HOME/npm"
 export npm_config_logs_dir="$XDG_STATE_HOME/npm/logs"
 
+# Go (XDG compliant)
+export GOPATH="$XDG_DATA_HOME/go"
+export GOCACHE="$XDG_CACHE_HOME/go-build"
+export GOMODCACHE="$XDG_CACHE_HOME/go/mod"
+export GOENV="$XDG_CONFIG_HOME/go/env"
+
 # RubyGems
 export GEM_HOME="$XDG_DATA_HOME/gem"
 export GEM_PATH="$GEM_HOME:$HOME/.gem"
@@ -35,9 +41,11 @@ export UV_PYTHON_PREFERENCE=managed
 # Claude Code
 export CLAUDE_CONFIG_DIR="$XDG_CONFIG_HOME/claude"
 
-# Pi coding agent
-export PI_CODING_AGENT_DIR="$XDG_CONFIG_HOME/pi/agent"
+# Pi coding agent (XDG compliant)
+export PI_CODING_AGENT_DIR="$XDG_DATA_HOME/pi/agent"
 export PI_CODING_AGENT_SESSION_DIR="$XDG_STATE_HOME/pi/sessions"
+export REMOTE_PI_HOME="$XDG_STATE_HOME/pi"
+export FFF_ENABLE_HOME_SCAN=0
 
 # kubectl
 export KUBECONFIG="$XDG_STATE_HOME/kube/config"

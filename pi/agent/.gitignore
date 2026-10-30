@@ -1,7 +1,7 @@
 auth.json
 sessions/
-bin/
-npm/
+bin
+npm
 git/
 *.log
 mcp-cache.json
@@ -16,4 +16,5 @@ run-history.jsonl
 trust.json
 web-search-cache
 antigravity-accounts.json
-cache/
+cache
+pi-web-access

@@ -4,13 +4,16 @@ Prefix: C-b
 
 ## Most used
 
-C-b g        show this help
-C-b ?        show raw tmux key table
-C-b o        SessionX: switch/create sessions and projects
+C-b g        show this help (cheatsheet)
+C-b G        Lazygit popup in current repo
+C-b a        floating Pi scratchpad (persists in-memory; C-b d hides, /exit quits)
+C-b e        floating scratch shell (persists in-memory; C-b d hides, exit quits)
 C-b p        project picker: attach/create tmux session for a repo
-C-b e        scratch shell popup in current directory
-C-b u        pick/open URL from pane history
-C-b f        fuzzy-filter scrollback; selected line copied to clipboard
+C-b o        SessionX: switch/create sessions and projects
+C-b Space    quick toggle between last two active windows
+C-b BSpace   quick toggle between last two active sessions
+C-b u        pick/open URL from pane history (macOS browser)
+C-b f        fuzzy-filter scrollback; selected line copied to macOS clipboard
 C-b /        native scrollback search, jumps in copy-mode
 C-b r        reload tmux config
 C-b C-s      save tmux session/layout state
@@ -20,10 +23,13 @@ C-b t        unbound; tmux clock-mode disabled
 
 ## Windows = tmux tabs
 
-C-b c        new window in current directory
+Cmd-1..9     jump directly to window (via Ghostty, no prefix needed)
+Alt-1..9     jump directly to window (Option/Alt, no prefix needed)
 C-b 1..9     jump to window number
+C-b c        new window in current directory
 C-b n        next window
-C-b p        previous window
+C-b Space    toggle last active window
+C-b < / >    swap window position left / right
 C-b ,        rename window
 C-b &        close window
 

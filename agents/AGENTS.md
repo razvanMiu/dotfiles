@@ -1,57 +1,47 @@
 # Canonical Agent Instructions
 
-Canonical marker: `xdg-agent-canonical-v1`.
+Peer-level systems engineering: communicate concisely and technically; skip introductory explanations, challenge flawed assumptions, and state trade-offs and invariants directly.
+Production rigor: verify behavior in source or primary docs before editing, preserve existing architecture and domain language, and back every change with executable evidence.
 
-I am an experienced developer. Do not treat work as vibe coding.
+## Operating Discipline & Boundaries
 
-## Operating discipline
+- **Material ambiguity**: Ask when unresolved ambiguity materially affects scope, behavior, architecture, or safety; otherwise state reasonable assumptions and proceed. Push back with simpler alternatives when warranted.
+- **Surgical changes**: Touch only what you must. Every changed line must trace directly to the request. Clean up only your own orphans (unused imports/variables); never "improve" adjacent code, reformat untouched lines, or delete pre-existing dead code.
+- **Simplicity first**: Minimum code that completely solves the problem. Avoid single-use abstractions unless enforcing a required domain boundary or test seam. Zero speculative flexibility.
+- **Formatting hygiene**: Ensure every edited or created text file ends with a trailing newline.
+- **Hard gates**: Commit only when all agreed checks pass and the complete diff is reviewed. Never push to remote without approval. Never commit secrets or touch lockfiles/migrations without explicit instruction.
 
-- Understand before editing.
-- Read relevant files before changing them.
-- Make small, validated changes.
-- Preserve project conventions and domain language.
-- Prefer tests, type checks, and concrete evidence.
-- Do not invent architecture unless asked.
-- When a task is ambiguous, interview first and turn intent into an explicit plan.
+## Workflow: Plan -> Grill -> Slice -> Review -> Rewind
 
-## Planning and verification
+- **Plan & scope**: Lock scope, test seams, and measurable acceptance criteria (`/to-spec`) before implementation. For complex architecture, interview first (`grilling` / `/grill-with-docs`) until the decision frontier is settled. Use `/wayfinder` for multi-session decision maps.
+- **Spec check (Fresh eyes)**: For non-trivial plans, review the written spec in a fresh `reviewer` subagent (`context: "fresh"`) to catch unstated assumptions, missing failure modes, and blind spots before coding.
+- **Vertical slices**: Implement in small, test-backed vertical slices (`tdd` / `diagnosing-bugs` / `/implement`) with objective done criteria (tests, typechecks, build, reproduction diffs).
+- **Independent review**:
+  - Review the complete change before finalizing. Pass clear pointers (diff, spec, acceptance criteria)—never rationalize shortcuts in the prompt.
+  - Use a fresh `reviewer` (`context: "fresh"`) for working-tree diffs; use `code-review` for committed ranges (`<base>...HEAD`).
+  - Use `oracle` (`context: "fork"`) when auditing a long session for trajectory or decision drift.
+- **Rewind over drift**: Prefer a fresh session or checkpoint for context recovery. When a slice fails or context degrades, restore from a checkpoint (`pi-rewind`); before filesystem rollback, inspect the delta and never discard uncommitted user changes without approval.
 
-- Prefer spec-first work: clarify the goal, constraints, trade-offs, and acceptance criteria before implementation.
-- Split broad work into small vertical slices with checkpoints.
-- Define objective done criteria before autonomous implementation.
-- Verify with commands, tests, diffs, or other concrete evidence.
-- For non-trivial changes, use a separate reviewer, critic model, fork, or subagent before finalizing.
-- Avoid subjective success criteria for autonomous work; make success measurable.
+## Tool & Research Routing
 
-## Context management
+- **Code navigation**: Use FFF-backed `find`, `grep`, and `read` for file discovery, literal/regex search, and config inspection. Use **Serena MCP** for AST symbol hierarchies, cross-file references, type navigation, and structural refactors. Fall back to installed source when symbols are ambiguous.
+- **Library & framework docs**: Check repo-pinned versions first, then query **Context7 MCP** before writing code against external libraries; fall back to official primary documentation when unavailable.
+- **Web & primary-source research**:
+  - *Targeted lookup*: `google_search` / `web_search` + `fetch_content` for changelogs, RFCs, and error messages.
+  - *Deep / multi-source synthesis*: Dispatch a `researcher` subagent (`research`) to keep the main context clean; audit critical claims with `evidence-auditor` (`source_check`).
+  - *Confidentiality*: Never upload private repo code or sensitive data to external research services.
+- **UI & browser verification**: Use **Playwright MCP** to reproduce UI issues, inspect live DOM/computed styles, and capture visual evidence.
 
-- Keep always-loaded instructions short.
-- Put reusable workflows in skills rather than large global prompts.
-- For non-trivial coding, debugging, architecture, UI, or research tasks, use the `ai-workflow` skill to route work through Serena, Context7, Playwright, NotebookLM, subagents, and specialized skills as appropriate.
-- Use subagents/forks for noisy or separable work:
-  - codebase scouting
-  - web/library research
-  - second opinions
-  - code review
-  - test failure diagnosis
-  - architecture risk review
-- Keep parent context clean. Subagents should return concise findings with evidence.
-- Prefer restoring from checkpoints or starting a clean session over trying to verbally repair a badly drifted context.
+## Context Economy
 
-## Safety and dotfiles
+- Keep parent context clean: offload noisy codebase scouting (`scout`), research (`researcher`), and test-failure triage to subagents that return concise, evidence-backed summaries.
+- Communicate with subagents via **context pointers** (file paths, commit ranges, spec files) rather than pasting large blobs inline.
 
-- Follow the autonomous-with-hard-boundaries posture: plan first, then act autonomously inside deterministic safety boundaries.
-- Do not commit secrets, auth files, sessions, caches, browser profiles, generated state, or package/vendor installs.
-- Stateless config belongs in `~/.config`.
-- State belongs in `~/.local/state`.
-- Cache belongs in `~/.cache`.
-- Vendor/runtime assets belong in `~/.local/share` unless explicitly tracked.
-- For commands requiring credentials, prefer `with-secrets <command>` rather than embedding secrets in files, shell history, or prompts.
-- Run the dotfiles safety guard before finalizing dotfiles work when available: `scripts/check-dotfiles-safety`.
+## Safety, Supply Chain, and Dotfiles
 
-## Tooling and supply chain
+- **Autonomous within hard boundaries**: Plan first, then execute autonomously inside deterministic safety gates.
+- **Secrets**: Never commit, echo, or ask the user to paste API keys, tokens, or credentials into chat; never inspect `.env` files directly. Run credentialed commands (services, APIs, Redmine, deployment, DB, private registries) via `with-secrets -- <command>`. If a command fails with missing keys or 401 Unauthorized, re-run with `with-secrets -- <command>` instead of asking for credentials.
+- **Supply chain**: Treat MCP servers, agent skills, and plugins as executable supply-chain code. Prefer pinned versions (`@version` / commit SHA) from reviewed sources; never install unapproved plugins or MCP servers.
+- **Dotfiles (`~/.config`) rules**: Keep stateless config in `~/.config`, state in `~/.local/state`, cache in `~/.cache`, and vendor/runtime packages in `~/.local/share`. When editing `~/.config`, run `scripts/check-dotfiles-safety --quiet` and `git diff --check` before finalizing, and document non-obvious configuration boundaries in `docs/adr/`.
 
-- Treat agent plugins, MCP servers, skills, and marketplace packages as supply-chain code.
-- Prefer pinned, reviewed, official, or locally controlled sources.
-- Do not install arbitrary plugins or MCP servers without explicit approval.
-- Document durable tool/configuration decisions in ADRs when they are non-obvious trade-offs.
+Canonical marker: `xdg-agent-canonical-v2`.

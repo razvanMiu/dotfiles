@@ -11,9 +11,29 @@
 set -euo pipefail
 
 MODE="safe"
-if [[ "${1:-}" == "-a" || "${1:-}" == "--aggressive" ]]; then
-  MODE="aggressive"
-fi
+
+for arg in "$@"; do
+  case "$arg" in
+    -a|--aggressive)
+      MODE="aggressive"
+      ;;
+    -h|--help)
+      cat <<'EOF'
+Usage: docker-prune [-a|--aggressive]
+
+  default          Remove stopped containers, dangling images, and build cache older than 72h.
+  -a, --aggressive Also remove unused images older than 7 days (168h).
+  -h, --help       Show this help.
+EOF
+      exit 0
+      ;;
+    *)
+      echo "docker-prune: unknown option: $arg" >&2
+      echo "Usage: docker-prune [-a|--aggressive]" >&2
+      exit 2
+      ;;
+  esac
+done
 
 summary() {
   # plain table: CLI 29 exposes anonymous struct fields to --format, which is unusable

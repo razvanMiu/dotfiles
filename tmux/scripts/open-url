@@ -10,4 +10,11 @@ url=$(grep -Eo 'https?://[^[:space:]<>"'"'"'(){}|\\^`\[\]]+' "$file" \
   | fzf --prompt='url> ' --height=80% --reverse --preview 'printf "%s\n" {}')
 
 [ -n "$url" ] || exit 0
-setsid -f xdg-open "$url" >/dev/null 2>&1 || xdg-open "$url" >/dev/null 2>&1 &
+
+if command -v open >/dev/null 2>&1; then
+  open "$url"
+elif command -v setsid >/dev/null 2>&1 && command -v xdg-open >/dev/null 2>&1; then
+  setsid -f xdg-open "$url" >/dev/null 2>&1 || xdg-open "$url" >/dev/null 2>&1 &
+elif command -v xdg-open >/dev/null 2>&1; then
+  xdg-open "$url" >/dev/null 2>&1 &
+fi

@@ -38,7 +38,8 @@ cd "$repo_root"
 
 # This guard is dotfiles-specific. Refuse to run from the wrong repo to avoid
 # surprising unrelated projects that happen to use the script.
-if [[ "${repo_root%/}" != "${XDG_CONFIG_HOME:-$HOME/.config}" ]]; then
+expected_root="${XDG_CONFIG_HOME:-$HOME/.config}"
+if [[ "${repo_root%/}" != "${expected_root%/}" ]]; then
   echo "check-dotfiles-safety: expected dotfiles repo at \${XDG_CONFIG_HOME:-~/.config}, got: $repo_root" >&2
   exit 2
 fi
@@ -53,8 +54,9 @@ is_forbidden_path() {
   local path="$1"
 
   case "$path" in
-    # Local env/secrets. Keep .env.example tracked; block actual local env files.
-    .env|*.pem|*.key|*.p12|*.pfx|*_rsa|*_ed25519|*.agekey) return 0 ;;
+    # Local env/secrets templates are permitted; block actual local env files.
+    .env.example|*/.env.example|.env.sample|*/.env.sample|.env.template|*/.env.template) return 1 ;;
+    .env|*/.env|.env.*|*/.env.*|*.pem|*.key|*.p12|*.pfx|*_rsa|*_ed25519|*.agekey) return 0 ;;
 
     # Common auth/cookie/session material.
     *.credentials.json|*/.credentials.json|auth.json|*/auth.json|storage_state.json|*/storage_state.json|cookies.json|*/cookies.json|cookies.*.json|*/cookies.*.json) return 0 ;;
@@ -88,30 +90,23 @@ is_text_file() {
 }
 
 scan_worktree_content() {
-  local path="$1"
+  local path="$1" match line_no
   [[ -f "$path" ]] || return 0
   is_text_file "$path" || return 0
-  if LC_ALL=C grep -En "$secret_regex" -- "$path" >/tmp/check-dotfiles-safety-grep.$$ 2>/dev/null; then
-    local first
-    first="$(head -n 1 /tmp/check-dotfiles-safety-grep.$$)"
-    rm -f /tmp/check-dotfiles-safety-grep.$$
-    add_violation "secret-like content in $path: $first"
-  else
-    rm -f /tmp/check-dotfiles-safety-grep.$$ 2>/dev/null || true
+  match="$(LC_ALL=C grep -IEn -m 1 "$secret_regex" -- "$path" 2>/dev/null | grep -Ev '=[[:space:]]*["'\'']?bws\??:' || true)"
+  if [[ -n "$match" ]]; then
+    line_no="${match%%:*}"
+    add_violation "secret-like content in $path:$line_no (redacted)"
   fi
 }
 
 scan_staged_content() {
-  local path="$1"
-  # Deleted files have no staged blob to scan.
+  local path="$1" match line_no
   git cat-file -e ":$path" 2>/dev/null || return 0
-  if git show --textconv ":$path" 2>/dev/null | LC_ALL=C grep -En "$secret_regex" >/tmp/check-dotfiles-safety-grep.$$ 2>/dev/null; then
-    local first
-    first="$(head -n 1 /tmp/check-dotfiles-safety-grep.$$)"
-    rm -f /tmp/check-dotfiles-safety-grep.$$
-    add_violation "secret-like staged content in $path: $first"
-  else
-    rm -f /tmp/check-dotfiles-safety-grep.$$ 2>/dev/null || true
+  match="$(git show --textconv ":$path" 2>/dev/null | LC_ALL=C grep -IEn -m 1 "$secret_regex" 2>/dev/null | grep -Ev '=[[:space:]]*["'\'']?bws\??:' || true)"
+  if [[ -n "$match" ]]; then
+    line_no="${match%%:*}"
+    add_violation "secret-like staged content in $path:$line_no (redacted)"
   fi
 }
 
@@ -119,7 +114,7 @@ check_path_set() {
   local label="$1"
   local content_mode="$2"
   local path
-  while IFS= read -r path; do
+  while IFS= read -r -d '' path; do
     [[ -n "$path" ]] || continue
     if is_forbidden_path "$path"; then
       add_violation "forbidden $label path: $path"
@@ -134,21 +129,20 @@ check_path_set() {
 }
 
 if [[ "$mode" == "staged" ]]; then
-  git diff --cached --name-only --diff-filter=ACMRT | check_path_set "staged" staged
+  check_path_set "staged" staged < <(git diff --cached -z --name-only --diff-filter=ACMRT)
 else
-  git diff --cached --name-only --diff-filter=ACMRT | check_path_set "staged" staged
-  git ls-files | check_path_set "tracked" worktree
-  git ls-files --others --exclude-standard | check_path_set "untracked" worktree
+  check_path_set "staged" staged < <(git diff --cached -z --name-only --diff-filter=ACMRT)
+  check_path_set "tracked" worktree < <(git ls-files -z)
+  check_path_set "untracked" worktree < <(git ls-files -z --others --exclude-standard)
 fi
 
 if [[ "$audit_ignored" -eq 1 ]]; then
-  declare -A ignored_audit_counts=()
-  while IFS= read -r path; do
+  while IFS= read -r -d '' path; do
     [[ -n "$path" ]] || continue
     if is_forbidden_path "$path"; then
       audit_key="$path"
       case "$path" in
-        .env) audit_key=".env" ;;
+        .env|*/.env|.env.*|*/.env.*) audit_key=".env" ;;
         BraveSoftware/*) audit_key="BraveSoftware/ (browser profile)" ;;
         google-chrome*/*) audit_key="google-chrome*/ (browser profile)" ;;
         chromium/*) audit_key="chromium/ (browser profile)" ;;
@@ -174,17 +168,10 @@ if [[ "$audit_ignored" -eq 1 ]]; then
         .serena/*|*/.serena/*) audit_key=".serena/" ;;
         __pycache__/*|*/__pycache__/*) audit_key="__pycache__/" ;;
       esac
-      ignored_audit_counts[$audit_key]="$(( ${ignored_audit_counts[$audit_key]:-0} + 1 ))"
+      printf '%s\n' "$audit_key"
     fi
-  done < <(git ls-files --others --ignored --exclude-standard)
-
-  if (( ${#ignored_audit_counts[@]} > 0 )); then
-    {
-      for audit_key in "${!ignored_audit_counts[@]}"; do
-        printf 'ignored: %s (%s)\n' "$audit_key" "${ignored_audit_counts[$audit_key]}"
-      done
-    } | sort >&2
-  fi
+  done < <(git ls-files -z --others --ignored --exclude-standard) \
+    | sort | uniq -c | awk '{ count=$1; sub(/^[[:space:]]*[0-9]+[[:space:]]+/, ""); printf "ignored: %s (%s)\n", $0, count }' >&2
 fi
 
 if (( ${#violations[@]} > 0 )); then

@@ -17,6 +17,8 @@ SOURCES_FILE="${SKILL_SOURCES_FILE:-$AGENTS_DIR/skill-sources.json}"
 SOURCE_ROOT="${SKILL_SOURCE_ROOT:-$XDG_DATA_HOME/agent-skill-sources}"
 MANIFEST="$AGENTS_DIR/.managed-skills.manifest"
 
+trap 'rm -f "$MANIFEST.tmp"' EXIT
+
 validate_sources_json() {
   python - "$SOURCES_FILE" <<'PY'
 import json
@@ -148,6 +150,10 @@ update_source_repo() {
     git -C "$source_dir" checkout "$ref" >&2
     git -C "$source_dir" pull --ff-only origin "$ref" >&2 2>/dev/null || true
   else
+    default_branch="$(git -C "$source_dir" symbolic-ref --quiet --short refs/remotes/origin/HEAD 2>/dev/null || true)"
+    if [[ -n "$default_branch" ]]; then
+      git -C "$source_dir" checkout "${default_branch#origin/}" >&2 2>/dev/null || true
+    fi
     git -C "$source_dir" pull --ff-only >&2
   fi
 
@@ -163,31 +169,45 @@ fi
 
 validate_sources_json
 
+# Pre-fetch and update all source repositories before modifying any destination skills.
+# This prevents wiping existing managed skills if network or git fetch fails.
+rows="$(emit_skill_rows)"
+declare -a updated_keys=()
+
+while IFS=$'\x1f' read -r source_name repo_url ref _rel_path _dest_name; do
+  source_key="$source_name"$'\x1f'"$repo_url"$'\x1f'"$ref"
+  already_updated=0
+  for k in "${updated_keys[@]:-}"; do
+    if [[ "$k" == "$source_key" ]]; then
+      already_updated=1
+      break
+    fi
+  done
+  if [[ "$already_updated" -eq 0 ]]; then
+    update_source_repo "$source_name" "$repo_url" "$ref" >/dev/null
+    updated_keys+=("$source_key")
+  fi
+done <<< "$rows"
+
 # Remove only skills previously managed by this script. Leave custom local skills
 # in ~/.config/agents/skills untouched.
 if [[ -f "$MANIFEST" ]]; then
   while IFS= read -r skill_name; do
     [[ -n "$skill_name" ]] || continue
-    rm -rf -- "$DEST_DIR/$skill_name"
+    if [[ "$skill_name" =~ ^[a-z0-9][a-z0-9-]{0,63}$ ]]; then
+      rm -rf -- "$DEST_DIR/$skill_name"
+    fi
   done < "$MANIFEST"
 fi
 
 : > "$MANIFEST.tmp"
 
-current_source_key=""
-current_source_dir=""
-
-while IFS=$'\x1f' read -r source_name repo_url ref rel_path dest_name; do
-  source_key="$source_name"$'\x1f'"$repo_url"$'\x1f'"$ref"
-  if [[ "$source_key" != "$current_source_key" ]]; then
-    current_source_dir="$(update_source_repo "$source_name" "$repo_url" "$ref")"
-    current_source_key="$source_key"
-  fi
-  copy_skill "$source_name" "$current_source_dir" "$rel_path" "$dest_name"
-done < <(emit_skill_rows)
+while IFS=$'\x1f' read -r source_name _repo_url _ref rel_path dest_name; do
+  source_dir="$SOURCE_ROOT/$source_name"
+  copy_skill "$source_name" "$source_dir" "$rel_path" "$dest_name"
+done <<< "$rows"
 
 sort -u "$MANIFEST.tmp" > "$MANIFEST"
-rm -f "$MANIFEST.tmp"
 
 # Shared agent convention used by Pi, Claude Code, and other harnesses.
 if [[ -L "$HOME/.agents" || ! -e "$HOME/.agents" ]]; then

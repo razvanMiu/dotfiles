@@ -1,0 +1,36 @@
+#!/bin/zsh -l
+# Synchronize environment variables from zsh to the running tmux server.
+# Sourced on tmux startup and config reload (prefix r).
+
+set -e
+
+# Sync all XDG and key environment variables defined in env.zsh
+sync_vars=(
+  XDG_CONFIG_HOME
+  XDG_CACHE_HOME
+  XDG_DATA_HOME
+  XDG_STATE_HOME
+  XDG_BIN_HOME
+  XDG_RUNTIME_DIR
+  XDG_DOCUMENTS_DIR
+  PI_CODING_AGENT_DIR
+  PI_CODING_AGENT_SESSION_DIR
+  REMOTE_PI_HOME
+  CLAUDE_CONFIG_DIR
+  GOPATH
+  GOCACHE
+  GOMODCACHE
+  GOENV
+  npm_config_cache
+  npm_config_logs_dir
+  KUBECONFIG
+  COLIMA_HOME
+  DOCKER_CONFIG
+)
+
+for var in "${sync_vars[@]}"; do
+  val="${(P)var}"
+  if [ -n "$val" ]; then
+    tmux set-environment -g "$var" "$val"
+  fi
+done

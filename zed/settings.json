@@ -17,6 +17,14 @@
   "format_on_save": "on",
   "tab_size": 2,
 
+  // Inlay Hints (Required for Version Lens / Depsy / LSP hints)
+  "inlay_hints": {
+    "enabled": true,
+    "show_type_hints": true,
+    "show_parameter_hints": true,
+    "show_other_hints": true,
+  },
+
   // UI & Theming
   "ui_font_family": "JetBrainsMono Nerd Font",
   "buffer_font_family": "JetBrainsMono Nerd Font",
@@ -53,6 +61,7 @@
     "biome": true,
     "catppuccin": true,
     "catppuccin-icons": true,
+    "depsy-lsp": true,
     "docker-compose": true,
     "dockerfile": true,
     "emmet": true,

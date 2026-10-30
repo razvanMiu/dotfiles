@@ -1,0 +1,10 @@
+#!/bin/sh
+# Return names of OTHER sessions that have pending alerts.
+set -eu
+current_sess="${1:-}"
+
+tmux list-sessions -F "#{session_name} #{session_alerts}" 2>/dev/null | while read -r sname salerts; do
+  if [ -n "$salerts" ] && [ "$sname" != "$current_sess" ]; then
+    printf "%s " "$sname"
+  fi
+done

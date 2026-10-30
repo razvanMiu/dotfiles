@@ -1,0 +1,16 @@
+#!/bin/sh
+# Persistent floating Pi scratchpad: attaches to an in-memory session.
+# Closing or detaching the popup hides it without killing the running conversation.
+# To completely terminate the session, type /exit in Pi.
+
+set -eu
+
+SESSION="_pi_scratch"
+CWD="${1:-$PWD}"
+
+if ! tmux has-session -t "$SESSION" 2>/dev/null; then
+  tmux new-session -d -s "$SESSION" -c "$CWD" "pi --no-session"
+  tmux set-option -t "$SESSION" status off
+fi
+
+exec env -u TMUX tmux attach-session -t "$SESSION"

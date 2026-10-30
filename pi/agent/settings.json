@@ -1,40 +1,40 @@
 {
+  "$schema": "https://pi.dev/schemas/settings.schema.json",
   "lastChangelogVersion": "1.4.0",
-  "defaultProvider": "openai",
-  "defaultModel": "gpt-6.1-sol",
+  "defaultProvider": "antigravity",
+  "defaultModel": "gemini-3.8-flash",
   "defaultThinkingLevel": "high",
+  "enabledModels": [
+    "antigravity/*",
+    "openai/gpt-6*",
+    "eea-inhouse/**",
+    "ollama-cloud/beam"
+  ],
   "enableSkillCommands": true,
-  "skills": [
-    "../../agents/skills"
-  ],
+  "skills": ["~/.config/agents/skills"],
   "packages": [
-    "npm:pi-web-access",
-    "npm:pi-subagents",
-    "npm:pi-observational-memory",
-    "npm:pi-sensitive-guard",
-    "npm:pi-ollama-cloud",
-    "npm:pi-provider-litellm",
-    "npm:pi-antigravity",
-    "npm:@marckrenn/pi-sub-bar"
+    "npm:pi-web-access@0.46.0",
+    "npm:pi-subagents@0.84.0",
+    "npm:pi-observational-memory@3.1.4",
+    "npm:pi-sensitive-guard@0.5.0",
+    "npm:pi-ollama-cloud@0.13.1",
+    "npm:pi-antigravity@0.11.0",
+    "npm:@marckrenn/pi-sub-bar@1.5.0",
+    "npm:@ayulab/pi-rewind@0.4.6",
+    "npm:@ff-labs/pi-fff@0.11.0"
   ],
+  "defaultTools": ["+grep", "+find", "+ls"],
   "hideThinkingBlock": false,
   "theme": "dark",
-  "extensions": [
-    "+builtin:mcp"
-  ],
-  "litellm": {
-    "mcp": {
-      "enabled": false
-    },
-    "skills": {
-      "enabled": false
-    },
-    "budget": {
-      "enabled": false
-    }
+  "cacheWarming": "streaming",
+  "compaction": {
+    "enabled": true,
+    "reserveTokens": 16384,
+    "keepRecentTokens": 20000
   },
-  "deviceId": "0cd85e3f-6f52-4f86-841f-7f6282b4a9b1",
-  "mcp": {
-    "enabled": false
-  }
+  "terminal": {
+    "images": "kitty",
+    "hyperlinks": true
+  },
+  "deviceId": "0cd85e3f-6f52-4f86-841f-7f6282b4a9b1"
 }

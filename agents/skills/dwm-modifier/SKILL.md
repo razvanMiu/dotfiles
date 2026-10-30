@@ -1,17 +1,17 @@
 ---
 name: dwm-modifier
-description: Modify Razvan's personalized suckless dwm setup safely, including config changes, native C patches, dropdown/status features, X11 behavior, build/install workflow, and patch hygiene. Use when changing /home/razvan/.config/dwm files such as config.h, config.def.h, dwm.c, features/dropdown.c, features/status.c, CONTEXT.md, ADRs, or when debugging dwm runtime behavior, WM_CLASS rules, keybindings, multi-monitor behavior, focus, tags, floating, status rendering, or restart/install issues.
+description: Suckless dwm window manager configuration, native C patches, and X11 rules in ~/.config/dwm. Use when modifying dwm config.h, patches, dropdown/status features, or debugging window rules and keybindings.
 ---
 
 # DWM Modifier
 
 ## Quick start
 
-Work in `/home/razvan/.config/dwm`.
+Work in `~/.config/dwm`.
 
 ```sh
-git -C /home/razvan/.config status --short dwm
-make -C /home/razvan/.config/dwm clean && make -C /home/razvan/.config/dwm
+git -C ~/.config status --short dwm
+make -C ~/.config/dwm clean && make -C ~/.config/dwm
 ```
 
 Do **not** install, kill X, restart dwm, or press restart keybindings unless the user explicitly approves.
@@ -23,15 +23,15 @@ Do **not** install, kill X, restart dwm, or press restart keybindings unless the
 - Main source: `dwm.c`.
 - Local feature modules live under `features/`, included from `dwm.c` after `config.h`: `features/dropdown.c` and `features/status.c`.
 - Domain docs: read `CONTEXT.md` and relevant `docs/adr/*.md` before changing terminology or behavior.
-- Session startup: `dwm.desktop` -> `/home/razvan/.config/X11/xinitrc` -> `~/.local/bin/startdwm.sh`.
+- Session startup: `dwm.desktop` -> `~/.config/X11/xinitrc` -> `~/.local/bin/startdwm.sh`.
 - Installed binary target: usually `/usr/local/bin/dwm` from `config.mk`.
 
 ## Workflow
 
 1. **Inspect before editing**
-   - Check git status under `/home/razvan/.config`.
+   - Check git status under `~/.config`.
    - Read relevant parts of `config.h`, `config.def.h`, `dwm.c`, included patch files, `CONTEXT.md`, and ADRs.
-   - For runtime matching issues, use/ask for `xprop WM_CLASS WM_NAME` evidence.
+   - For runtime matching issues, inspect `xprop WM_CLASS WM_NAME` evidence.
 
 2. **Classify the change**
    - Config-only: keybindings, rules, commands, layout constants.
@@ -45,16 +45,19 @@ Do **not** install, kill X, restart dwm, or press restart keybindings unless the
    - Keep one logical change per edit batch when possible.
    - Never regenerate or overwrite `config.h` from `config.def.h` without asking.
 
-4. **Validate**
-   - Always run:
+4. **Validate & Completion criteria**
+   - Clean compilation:
      ```sh
-     make -C /home/razvan/.config/dwm clean && make -C /home/razvan/.config/dwm
+     make -C ~/.config/dwm clean && make -C ~/.config/dwm
      ```
-   - For install preview, use:
+   - Install preview:
      ```sh
-     make -C /home/razvan/.config/dwm -n install
+     make -C ~/.config/dwm -n install
      ```
-   - Report changed files, validation output, residual risks, and exact runtime test steps.
+   - Done criteria:
+     1. `make clean && make` exits with status `0` and zero compiler warnings.
+     2. `git diff -C ~/.config dwm` confirms only intended changes are touched.
+     3. Changed files, validation output, residual risks, and exact runtime test steps are reported.
 
 ## Dropdown-specific rules
 
@@ -85,7 +88,7 @@ static const Dropdown dropdowns[] = {
 
 ## Install/restart protocol
 
-Only after explicit user approval: `cd /home/razvan/.config/dwm && sudo make install`. Then the user can press `MOD+Shift+q`; `startdwm.sh` relaunches only if the installed binary checksum changed.
+Only after explicit user approval: `cd ~/.config/dwm && sudo make install`. Then the user can press `MOD+Shift+q`; `startdwm.sh` relaunches only if the installed binary checksum changed.
 
 ## Common pitfalls
 

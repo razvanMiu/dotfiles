@@ -24,9 +24,11 @@ printf '%s\n' "$line" > "$tmp"
 # the terminal clipboard via OSC 52 when supported.
 tmux set-buffer -w -- "$line" 2>/dev/null || tmux load-buffer "$tmp" 2>/dev/null || true
 
-# Then set the X11/Wayland clipboard. Run detached so the clipboard owner is not
+# Then set the macOS/X11/Wayland clipboard. Run detached so the clipboard owner is not
 # killed when the tmux popup closes.
-if command -v xclip >/dev/null 2>&1; then
+if command -v pbcopy >/dev/null 2>&1; then
+  pbcopy < "$tmp" 2>/dev/null || true
+elif command -v xclip >/dev/null 2>&1; then
   setsid -f sh -c 'xclip -in -selection clipboard < "$1"' sh "$tmp" >/dev/null 2>&1 || true
 elif command -v xsel >/dev/null 2>&1; then
   setsid -f sh -c 'xsel -ib < "$1"' sh "$tmp" >/dev/null 2>&1 || true

@@ -9,7 +9,8 @@ const BWS_CONTROL_KEYS = ["BWS_ACCESS_TOKEN", "BWS_PROJECT_ID", "BWS_SERVER_URL"
 type Env = Record<string, string>;
 type BwsSecret = { id: string; key: string; value: string };
 type Options = {
-  envFile: string;
+  envFile?: string;
+  noGlobalEnv: boolean;
   passBwsEnv: boolean;
   command: string[];
 };
@@ -20,7 +21,29 @@ type SecretRef = {
 };
 
 const options = parseArgs(process.argv.slice(2));
-const fileEnv = loadDotEnv(options.envFile);
+
+const configDir = process.env.XDG_CONFIG_HOME ?? join(process.env.HOME ?? "", ".config");
+const globalEnvFile = join(configDir, ".env");
+const cwd = process.cwd();
+const localEnvFile = options.envFile ?? (cwd !== configDir ? join(cwd, ".env") : undefined);
+
+if (options.envFile && !existsSync(options.envFile)) {
+  fail(`specified env file missing: ${options.envFile}`);
+}
+
+const globalEnv = !options.noGlobalEnv && existsSync(globalEnvFile) ? loadDotEnv(globalEnvFile) : {};
+const localEnv = localEnvFile && existsSync(localEnvFile) ? loadDotEnv(localEnvFile) : {};
+
+if (Object.keys(globalEnv).length === 0 && Object.keys(localEnv).length === 0) {
+  if (options.noGlobalEnv) {
+    fail(`no local .env found at ${localEnvFile ?? "./.env"}`);
+  } else {
+    fail(`no .env found at global (${globalEnvFile}) or local (${localEnvFile ?? "./.env"})`);
+  }
+}
+
+// Local .env takes priority over global .env
+const fileEnv: Env = { ...globalEnv, ...localEnv };
 const mergedEnv = mergeEnv(fileEnv, process.env);
 const refs = collectSecretRefs(mergedEnv);
 const childEnv: Env = { ...mergedEnv };
@@ -29,11 +52,11 @@ if (refs.length > 0) {
   const { BWS_ACCESS_TOKEN, BWS_PROJECT_ID, BWS_SERVER_URL } = mergedEnv;
 
   if (!BWS_ACCESS_TOKEN) {
-    fail(`BWS_ACCESS_TOKEN missing in ${options.envFile} or current environment`);
+    fail(`BWS_ACCESS_TOKEN missing in env files or current environment`);
   }
 
   if (!BWS_PROJECT_ID) {
-    fail(`BWS_PROJECT_ID missing in ${options.envFile} or current environment`);
+    fail(`BWS_PROJECT_ID missing in env files or current environment`);
   }
 
   const bws = bwsBinary();
@@ -57,13 +80,15 @@ if (!options.passBwsEnv) {
 runChild(options.command, childEnv);
 
 function parseArgs(args: string[]): Options {
-  const defaultEnvFile = join(process.env.XDG_CONFIG_HOME ?? join(process.env.HOME ?? "", ".config"), ".env");
-  let envFile = defaultEnvFile;
+  let envFile: string | undefined;
+  let noGlobalEnv = false;
   let passBwsEnv = false;
   const command: string[] = [];
 
   for (let i = 0; i < args.length; i += 1) {
     const arg = args[i];
+
+    if (arg === undefined) continue;
 
     if (arg === "--") {
       command.push(...args.slice(i + 1));
@@ -79,6 +104,11 @@ function parseArgs(args: string[]): Options {
       continue;
     }
 
+    if (arg === "--no-global-env") {
+      noGlobalEnv = true;
+      continue;
+    }
+
     if (arg === "--env-file") {
       const value = args[i + 1];
       if (!value) fail("--env-file requires a path");
@@ -88,8 +118,14 @@ function parseArgs(args: string[]): Options {
     }
 
     if (arg.startsWith("--env-file=")) {
-      envFile = arg.slice("--env-file=".length);
+      const value = arg.slice("--env-file=".length);
+      if (!value) fail("--env-file requires a path");
+      envFile = value;
       continue;
+    }
+
+    if (arg.startsWith("-")) {
+      fail(`unknown option: ${arg}`);
     }
 
     command.push(...args.slice(i));
@@ -100,17 +136,19 @@ function parseArgs(args: string[]): Options {
     usage(1);
   }
 
-  return { envFile, passBwsEnv, command };
+  return { envFile, noGlobalEnv, passBwsEnv, command };
 }
 
 function usage(exitCode: number): never {
   const configHome = process.env.XDG_CONFIG_HOME ?? "$HOME/.config";
   console.error(`Usage: with-secrets [options] -- <command> [args...]
 
-Loads ${configHome}/.env, resolves bws:<secret-key> references from Bitwarden Secrets Manager, then runs the command.
+Loads global ${configHome}/.env, overlays local ./.env (if present) with local priority,
+resolves bws:<secret-key> references from Bitwarden Secrets Manager, then runs the command.
 
 Options:
-  --env-file <path>   Use a different env file
+  --env-file <path>   Use a specific env file instead of local ./.env
+  --no-global-env     Do not load global ${configHome}/.env
   --pass-bws-env      Pass BWS_* control variables to the child command
   -h, --help          Show this help
 
@@ -132,6 +170,7 @@ function loadDotEnv(path: string): Env {
   for (let index = 0; index < lines.length; index += 1) {
     const lineNumber = index + 1;
     const raw = lines[index];
+    if (raw === undefined) continue;
     const line = raw.trim();
 
     if (!line || line.startsWith("#")) continue;
@@ -154,6 +193,8 @@ function loadDotEnv(path: string): Env {
   return env;
 }
 
+const ESCAPES: Record<string, string> = { n: "\n", r: "\r", t: "\t", '"': '"', "\\": "\\" };
+
 function parseDotEnvValue(value: string, path: string, lineNumber: number): string {
   if (value.length < 2) return value;
 
@@ -162,7 +203,7 @@ function parseDotEnvValue(value: string, path: string, lineNumber: number): stri
 
   if ((quote === '"' || quote === "'") && endQuote === quote) {
     const inner = value.slice(1, -1);
-    return quote === '"' ? inner.replace(/\\n/g, "\n").replace(/\\r/g, "\r").replace(/\\t/g, "\t").replace(/\\"/g, '"').replace(/\\\\/g, "\\") : inner;
+    return quote === '"' ? inner.replace(/\\([nrt"\\])/g, (_, ch: string) => ESCAPES[ch] ?? ch) : inner;
   }
 
   if (quote === '"' || quote === "'" || endQuote === '"' || endQuote === "'") {
@@ -205,11 +246,11 @@ function collectSecretRefs(env: Env): SecretRef[] {
 }
 
 function bwsBinary(): string {
-  try {
-    return execFileSync("sh", ["-c", "command -v bws"], { stdio: ["ignore", "pipe", "ignore"] }).toString().trim();
-  } catch {
+  const bin = Bun.which("bws");
+  if (!bin) {
     fail("bws not found on PATH; install Bitwarden Secrets Manager CLI as a user binary, e.g. ~/.local/bin/bws");
   }
+  return bin;
 }
 
 function listProjectSecrets(bws: string, projectId: string, env: Env): BwsSecret[] {
@@ -271,13 +312,30 @@ function resolveSecretRefs(refs: SecretRef[], secrets: BwsSecret[], env: Env): v
       fail(`${ref.envKey}: Bitwarden secret key ${ref.secretKey} not found in project`);
     }
 
-    env[ref.envKey] = matches[0].value;
+    const firstMatch = matches[0];
+    if (firstMatch === undefined) {
+      fail(`${ref.envKey}: Bitwarden secret match missing`);
+    }
+
+    env[ref.envKey] = firstMatch.value;
   }
 }
 
-function runChild(command: string[], env: Env): never {
+function runChild(command: string[], env: Env): void {
   const [cmd, ...args] = command;
+  if (!cmd) fail("missing command to execute");
+
   const child = spawn(cmd, args, { env, stdio: "inherit", shell: false });
+
+  const forwardSignal = (sig: NodeJS.Signals) => {
+    if (child.pid && !child.killed) {
+      child.kill(sig);
+    }
+  };
+
+  process.on("SIGINT", () => forwardSignal("SIGINT"));
+  process.on("SIGTERM", () => forwardSignal("SIGTERM"));
+  process.on("SIGHUP", () => forwardSignal("SIGHUP"));
 
   child.on("error", (error) => {
     fail(`failed to start ${cmd}: ${error.message}`);
@@ -290,8 +348,6 @@ function runChild(command: string[], env: Env): never {
       process.exit(code ?? 0);
     }
   });
-
-  return undefined as never;
 }
 
 function fail(message: string): never {

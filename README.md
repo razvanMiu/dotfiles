@@ -34,7 +34,7 @@ Local secret-bearing env file, never committed:
 ~/.config/.env
 ```
 
-`with-secrets` loads `~/.config/.env`, resolves Bitwarden Secrets Manager references, scrubs `BWS_*` control variables from the child environment by default, and runs a command:
+`with-secrets` loads `~/.config/.env`, overlays local `./.env` (if present, with local priority), resolves Bitwarden Secrets Manager references, scrubs `BWS_*` control variables from the child environment by default, and runs a command:
 
 ```sh
 with-secrets -- pi
@@ -271,7 +271,7 @@ Pi and Claude Code consume those canonical instructions differently:
 The canonical marker for loading tests is:
 
 ```text
-xdg-agent-canonical-v1
+xdg-agent-canonical-v2
 ```
 
 Verify pi loading:
@@ -292,13 +292,12 @@ CLAUDE_CONFIG_DIR="$XDG_CONFIG_HOME/claude" \
 Expected output for both:
 
 ```text
-xdg-agent-canonical-v1
+xdg-agent-canonical-v2
 ```
 
 See also:
 
 ```text
-~/.config/docs/agent-workflows.md
 ~/.config/docs/adr/0002-agent-configuration-boundaries.md
 ```
 
@@ -367,7 +366,7 @@ Install only after checking plugin inventory, token cost, MCP servers, hooks, co
 
 ## Pi coding agent
 
-Pi runtime config lives in:
+Pi runtime configuration lives in:
 
 ```text
 ~/.config/pi/agent/settings.json
@@ -381,23 +380,20 @@ Global Pi instructions are the canonical cross-agent instructions exposed throug
 
 These instructions bias Pi toward disciplined engineering work: read before edit, small validated changes, subagents for noisy scouting/review, measurable verification, and no secret/runtime commits.
 
-Do not commit Pi runtime/secrets. The local ignore file excludes:
+### XDG compliance and runtime separation
 
-```text
-~/.config/pi/agent/auth.json
-~/.config/pi/agent/sessions/
-~/.config/pi/agent/bin/
-~/.config/pi/agent/npm/
-~/.config/pi/agent/git/
-~/.config/pi/agent/mcp-auth.json
-~/.config/pi/agent/mcp.log*
-~/.config/pi/agent/models-store.json
-~/.config/pi/agent/run-history.jsonl
-~/.config/pi/agent/trust.json
-*.log
+Pi packages, binary shims, caches, and live credentials are fully separated from dotfiles by setting:
+
+```bash
+export PI_CODING_AGENT_DIR="$XDG_DATA_HOME/pi/agent"
+export PI_CODING_AGENT_SESSION_DIR="$XDG_STATE_HOME/pi/sessions"
+export REMOTE_PI_HOME="$XDG_STATE_HOME/pi"
 ```
 
-Pi currently hardcodes user-installed extension packages under `PI_CODING_AGENT_DIR` as `npm/` and `git/`. Do not set `PI_PACKAGE_DIR` for this purpose; pi uses that variable for its own executable/package asset directory. Keep generated package directories ignored until pi exposes supported relocation paths.
+- **`$XDG_CONFIG_HOME/pi/agent`**: Authored declarative configs only (`settings.json`, `mcp.json`, `extensions/`, `AGENTS.md`).
+- **`$XDG_DATA_HOME/pi/agent`**: Installed npm packages (`npm/`), binary shims (`bin/`), and package metadata (`pi-subagents/`, `pi-web-access/`), with symlinks to authored configs.
+- **`$XDG_STATE_HOME/pi`**: Sessions (`sessions/`), credentials (`auth.json`, `antigravity-accounts.json`), and mission indexes (`missions/`).
+- **`$XDG_CACHE_HOME/pi`**: Ephemeral caches (`cache/`, `web-search-cache/`, `models-store.json`).
 
 ### Install Pi packages
 

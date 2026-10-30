@@ -21,9 +21,8 @@ git_custom_status() {
 }
 
 if [ -n "$TMUX" ]; then
-  # tmux already shows current directory and git branch in the status line.
-  # Keep the shell prompt minimal inside tmux to avoid repeating context.
-  PROMPT='%B$%b '
+  # Inside tmux: show compact directory context (last 2 segments) at the cursor.
+  PROMPT='%{$fg[cyan]%}%2~%{$reset_color%} %B$%b '
 else
   PROMPT='$(git_custom_status)%{$fg[cyan]%}[%~% ]%{$reset_color%}%B$%b '
 fi

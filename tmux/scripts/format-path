@@ -1,0 +1,56 @@
+#!/bin/sh
+# Return a smart, readable directory path for the tmux status pill:
+# - Home -> ~
+# - Inside git repo -> repo/subpath (e.g. bise-frontend/src/components)
+# - Other -> ~/relative/path
+set -eu
+
+p="${1:-$HOME}"
+
+# 1. Exact home
+if [ "$p" = "$HOME" ]; then
+  printf '~'
+  exit 0
+fi
+
+# 2. Inside a git repository
+git_root=$(git -C "$p" rev-parse --show-toplevel 2>/dev/null || true)
+if [ -n "$git_root" ]; then
+  repo=$(basename "$git_root")
+  if [ "$p" = "$git_root" ]; then
+    printf '%s' "$repo"
+  else
+    rel="${p#$git_root/}"
+    case "$rel" in
+      */*/*)
+        first=$(printf '%s' "$rel" | cut -d/ -f1)
+        leaf=$(basename "$rel")
+        printf '%s/%s/…/%s' "$repo" "$first" "$leaf"
+        ;;
+      *)
+        printf '%s/%s' "$repo" "$rel"
+        ;;
+    esac
+  fi
+  exit 0
+fi
+
+# 3. Not in git: replace $HOME with ~
+case "$p" in
+  "$HOME"/*)
+    rel="${p#$HOME/}"
+    case "$rel" in
+      */*/*)
+        first=$(printf '%s' "$rel" | cut -d/ -f1)
+        leaf=$(basename "$rel")
+        printf '~/%s/…/%s' "$first" "$leaf"
+        ;;
+      *)
+        printf '~/%s' "$rel"
+        ;;
+    esac
+    ;;
+  *)
+    printf '%s' "$p"
+    ;;
+esac

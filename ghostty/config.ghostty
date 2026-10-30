@@ -9,3 +9,23 @@ keybind = global:alt+backquote=toggle_quick_terminal
 # to another app, instead of auto-hiding. It only closes on the toggle key.
 # (Default on macOS is true, which is why it disappeared when you clicked away.)
 quick-terminal-autohide = false
+
+# Cmd+1..9 switch tmux windows directly via escape sequences (Alt-1..9)
+keybind = super+digit_1=esc:1
+keybind = super+digit_2=esc:2
+keybind = super+digit_3=esc:3
+keybind = super+digit_4=esc:4
+keybind = super+digit_5=esc:5
+keybind = super+digit_6=esc:6
+keybind = super+digit_7=esc:7
+keybind = super+digit_8=esc:8
+keybind = super+digit_9=esc:9
+keybind = super+1=esc:1
+keybind = super+2=esc:2
+keybind = super+3=esc:3
+keybind = super+4=esc:4
+keybind = super+5=esc:5
+keybind = super+6=esc:6
+keybind = super+7=esc:7
+keybind = super+8=esc:8
+keybind = super+9=esc:9

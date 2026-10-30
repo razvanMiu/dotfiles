@@ -1,26 +1,26 @@
 ---
 name: rofi-modifier
-description: Modify Razvan's personalized rofi launcher configuration and Catppuccin themes safely. Use when changing /home/razvan/.config/rofi files, debugging rofi theme loading, styling rofi widgets, adjusting drun/run behavior, validating .rasi syntax, or aligning rofi with dwm/Catppuccin visuals.
+description: Rofi launcher configuration and Catppuccin themes in ~/.config/rofi. Use when modifying config.rasi, styling .rasi widgets, or debugging rofi launcher behavior and theme syntax.
 ---
 
 # Rofi Modifier
 
 ## Quick start
 
-Work in `/home/razvan/.config/rofi`.
+Work in `~/.config/rofi`.
 
 ```sh
-find /home/razvan/.config/rofi -maxdepth 2 -type f -printf '%P\n' | sort
+find ~/.config/rofi -maxdepth 2 -type f | sed "s|^$HOME/\.config/rofi/||" | sort
 rofi -dump-config >/tmp/rofi-config-check.out
-rofi -theme /home/razvan/.config/rofi/catppuccin-config.rasi -dump-theme >/tmp/rofi-theme-check.out
+rofi -theme ~/.config/rofi/catppuccin-config.rasi -dump-theme >/tmp/rofi-theme-check.out
 ```
 
 Do **not** replace the active theme, delete theme files, or change dwm launcher commands without making the dependency explicit and validating rofi.
 
 ## Local model
 
-- Active rofi config: `/home/razvan/.config/rofi/config.rasi`.
-- Active local styled theme: `/home/razvan/.config/rofi/catppuccin-config.rasi`.
+- Active rofi config: `~/.config/rofi/config.rasi`.
+- Active local styled theme: `~/.config/rofi/catppuccin-config.rasi`.
 - Palette files kept under `themes/`:
   - `themes/catppuccin-mocha.rasi`
   - `themes/catppuccin-macchiato.rasi`
@@ -32,8 +32,8 @@ Do **not** replace the active theme, delete theme files, or change dwm launcher 
 
 1. **Inspect before editing**
    - Read `config.rasi` and `catppuccin-config.rasi`.
-   - If dwm integration matters, inspect `/home/razvan/.config/dwm/config.h` rofi command.
-   - Check current files with `find /home/razvan/.config/rofi -maxdepth 2 -type f`.
+   - If dwm integration matters, inspect `~/.config/dwm/config.h` rofi command.
+   - Check current files with `find ~/.config/rofi -maxdepth 2 -type f`.
 
 2. **Classify the change**
    - Launcher behavior: edit `configuration {}` in `config.rasi` or the dwm command only if necessary.
@@ -48,12 +48,15 @@ Do **not** replace the active theme, delete theme files, or change dwm launcher 
    - Keep no-results/list spacing tidy: `fixed-num-lines: false`, `listview dynamic: true`, and avoid unconditional `mainbox spacing`.
    - Validate after every `.rasi` edit.
 
-4. **Validate**
+4. **Validate & Completion criteria**
    ```sh
    rofi -dump-config >/tmp/rofi-config-check.out 2>/tmp/rofi-config-check.err
-   rofi -theme /home/razvan/.config/rofi/catppuccin-config.rasi -dump-theme >/tmp/rofi-theme-check.out 2>/tmp/rofi-theme-check.err
+   rofi -theme ~/.config/rofi/catppuccin-config.rasi -dump-theme >/tmp/rofi-theme-check.out 2>/tmp/rofi-theme-check.err
    ```
-   Both commands must exit `0`; inspect stderr on failure.
+   Done criteria:
+   1. Both `-dump-config` and `-dump-theme` exit with status `0` and empty stderr.
+   2. `git diff -C ~/.config rofi` confirms only intended changes are touched.
+   3. Syntax validation output and affected widgets are reported.
 
 ## Current theme semantics
 

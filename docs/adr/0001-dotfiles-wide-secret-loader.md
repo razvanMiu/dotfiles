@@ -4,7 +4,7 @@ status: accepted
 
 # Dotfiles-wide secret loader
 
-The dotfiles repository uses `~/.config/.env` as the local untracked env contract and `~/.config/.env.example` as its tracked template, with `~/.config/scripts/with-secrets.ts` resolving `bws:<secret-key>` and `bws?:<secret-key>` references through the Bitwarden Secrets Manager CLI discovered on `PATH`. The `bws` executable is treated as a user binary under `~/.local/bin` rather than vendored in `~/.config`; secret references use Bitwarden secret keys for readability instead of immutable IDs, and BWS control variables are scrubbed from child commands by default to keep the Bitwarden access boundary separate from application secrets.
+The dotfiles repository uses `~/.config/.env` as the local untracked env contract and `~/.config/.env.example` as its tracked template, with `~/.config/scripts/with-secrets.ts` resolving `bws:<secret-key>` and `bws?:<secret-key>` references through the Bitwarden Secrets Manager CLI discovered on `PATH`. When executed from a project directory containing `./.env`, `with-secrets` layers the local env on top of the global base with local priority, allowing project-scoped Bitwarden project IDs and local variables to take precedence. The `bws` executable is treated as a user binary under `~/.local/bin` rather than vendored in `~/.config`; secret references use Bitwarden secret keys for readability instead of immutable IDs, and BWS control variables are scrubbed from child commands by default to keep the Bitwarden access boundary separate from application secrets.
 
 ## Considered Options
 

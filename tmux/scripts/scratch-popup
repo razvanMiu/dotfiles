@@ -1,0 +1,16 @@
+#!/bin/sh
+# Persistent floating scratch shell: attaches to a background session.
+# Closing or detaching (C-b d or clicking outside) hides it without killing running commands.
+# To completely terminate the session, type exit or press Ctrl-D.
+
+set -eu
+
+SESSION="_scratch_shell"
+CWD="${1:-$PWD}"
+
+if ! tmux has-session -t "$SESSION" 2>/dev/null; then
+  tmux new-session -d -s "$SESSION" -c "$CWD" "$SHELL -l"
+  tmux set-option -t "$SESSION" status off
+fi
+
+exec env -u TMUX tmux attach-session -t "$SESSION"
