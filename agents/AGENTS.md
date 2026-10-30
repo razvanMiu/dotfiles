@@ -24,7 +24,8 @@ Production rigor: verify behavior in source or primary docs before editing, pres
 
 ## Tool & Research Routing
 
-- **Code navigation**: Use FFF-backed `find`, `grep`, and `read` for file discovery, literal/regex search, and config inspection. Use **Serena MCP** for AST symbol hierarchies, cross-file references, type navigation, and structural refactors. Fall back to installed source when symbols are ambiguous.
+- **Code navigation**: Use built-in FFF `find`, `grep`, and `read` for file discovery, literal/regex search, and config inspection—never invoke raw recursive `grep`/`find` in `bash` across broad roots (`~`, `~/.local`, `/`). Use **Serena MCP** for AST symbol hierarchies, cross-file references, type navigation, and structural refactors. Fall back to installed source when symbols are ambiguous.
+- **Command execution**: Shell runs in Zsh (`/bin/zsh`). Never run interactive commands that block on stdin (pagers, confirmation prompts without `-y`); set explicit timeouts on network or potentially long commands.
 - **Library & framework docs**: Check repo-pinned versions first, then query **Context7 MCP** before writing code against external libraries; fall back to official primary documentation when unavailable.
 - **Web & primary-source research**:
   - *Targeted lookup*: `google_search` / `web_search` + `fetch_content` for changelogs, RFCs, and error messages.
