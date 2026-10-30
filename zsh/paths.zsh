@@ -5,5 +5,5 @@ export VOLTA_HOME="$XDG_DATA_HOME/volta"
 # PATH
 # typeset -U keeps path entries unique across nested shells.
 typeset -U path PATH
-path=("$XDG_BIN_HOME" "$GOPATH/bin" "$VOLTA_HOME/bin" "$BUN_INSTALL/bin" $path)
+path=("$XDG_BIN_HOME" "$GOPATH/bin" "$CARGO_HOME/bin" "$VOLTA_HOME/bin" "$BUN_INSTALL/bin" $path)
 export PATH

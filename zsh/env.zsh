@@ -31,6 +31,10 @@ export GOCACHE="$XDG_CACHE_HOME/go-build"
 export GOMODCACHE="$XDG_CACHE_HOME/go/mod"
 export GOENV="$XDG_CONFIG_HOME/go/env"
 
+# Rust (XDG compliant)
+export RUSTUP_HOME="${RUSTUP_HOME:-$XDG_DATA_HOME/rustup}"
+export CARGO_HOME="${CARGO_HOME:-$XDG_DATA_HOME/cargo}"
+
 # RubyGems
 export GEM_HOME="$XDG_DATA_HOME/gem"
 export GEM_PATH="$GEM_HOME:$HOME/.gem"
