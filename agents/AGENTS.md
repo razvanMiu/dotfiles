@@ -20,6 +20,7 @@ Production rigor: verify behavior in source or primary docs before editing, pres
   - Review the complete change before finalizing. Pass clear pointers (diff, spec, acceptance criteria)—never rationalize shortcuts in the prompt.
   - Use a fresh `reviewer` (`context: "fresh"`) for working-tree diffs; use `code-review` for committed ranges (`<base>...HEAD`).
   - Use `oracle` (`context: "fork"`) when auditing a long session for trajectory or decision drift.
+- **Commit**: Record a reviewed slice with the `commit` skill: group the diff into atomic, revertible commits and draft Conventional Commits messages for approval.
 - **Rewind over drift**: Prefer a fresh session or checkpoint for context recovery. When a slice fails or context degrades, restore from a checkpoint (`pi-rewind`); before filesystem rollback, inspect the delta and never discard uncommitted user changes without approval.
 
 ## Tool & Research Routing
