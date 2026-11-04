@@ -6,12 +6,16 @@
   "defaultThinkingLevel": "high",
   "enabledModels": [
     "antigravity/*",
+    "google/gemini-3.8*",
+    "google/gemini-4-*",
     "openai/gpt-6*",
     "eea-inhouse/**",
     "ollama-cloud/beam"
   ],
   "enableSkillCommands": true,
-  "skills": ["~/.config/agents/skills"],
+  "skills": [
+    "~/.config/agents/skills"
+  ],
   "packages": [
     "npm:pi-web-access@0.46.0",
     "npm:pi-subagents@0.84.0",
@@ -23,7 +27,11 @@
     "npm:@ayulab/pi-rewind@0.4.6",
     "npm:@ff-labs/pi-fff@0.11.0"
   ],
-  "defaultTools": ["+grep", "+find", "+ls"],
+  "defaultTools": [
+    "+grep",
+    "+find",
+    "+ls"
+  ],
   "shellPath": "/bin/zsh",
   "hideThinkingBlock": false,
   "theme": "dark",

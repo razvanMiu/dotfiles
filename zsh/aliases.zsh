@@ -22,3 +22,4 @@ t() {
 }
 alias tls='tmux list-sessions'
 alias tk='tmux kill-session -t'
+alias pis='$XDG_CONFIG_HOME/tmux/scripts/pi-sessions'

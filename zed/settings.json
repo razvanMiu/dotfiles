@@ -20,8 +20,8 @@
   // Inlay Hints (Required for Version Lens / Depsy / LSP hints)
   "inlay_hints": {
     "enabled": true,
-    "show_type_hints": true,
-    "show_parameter_hints": true,
+    "show_type_hints": false,
+    "show_parameter_hints": false,
     "show_other_hints": true,
   },
 
@@ -119,6 +119,11 @@
       "language_servers": ["!biome", "..."],
       "code_actions_on_format": {
         "source.fixAll.eslint": true,
+      },
+    },
+    "Rust": {
+      "inlay_hints": {
+        "enabled": false,
       },
     },
     "Python": {

@@ -1,0 +1,198 @@
+#!/usr/bin/env bash
+# Fast Fzf-powered Pi session picker for tmux.
+# Allows browsing, previewing, resuming, creating, and deleting Pi sessions.
+
+set -euo pipefail
+
+SESSION_DIR="${PI_CODING_AGENT_SESSION_DIR:-$HOME/.local/state/pi/sessions}"
+CWD="${1:-$PWD}"
+
+if ! command -v fzf >/dev/null 2>&1; then
+  tmux display-message "fzf is required for pi-sessions but not found on PATH."
+  exit 1
+fi
+
+if [ ! -d "$SESSION_DIR" ]; then
+  tmux display-message "Session directory not found: $SESSION_DIR"
+  exit 1
+fi
+
+# 1. Preview helper: Invoked by fzf preview option with the session file path
+if [ "${1:-}" = "--preview" ]; then
+  file="${2:-}"
+  [ -f "$file" ] || { echo "File not found: $file"; exit 0; }
+
+  python3 -c "
+import sys, json, os, time
+
+path = sys.argv[1]
+size = os.path.getsize(path)
+mtime = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(os.path.getmtime(path)))
+
+name = 'Unnamed'
+messages = []
+
+try:
+    with open(path, 'r', errors='ignore') as fp:
+        for line in fp:
+            try:
+                d = json.loads(line)
+                t = d.get('type')
+                if t == 'session_info' and d.get('name'):
+                    name = d['name']
+                elif t == 'message':
+                    role = d['message'].get('role', '')
+                    content = d['message'].get('content', '')
+                    text = ''
+                    if isinstance(content, str):
+                        text = content
+                    elif isinstance(content, list):
+                        for item in content:
+                            if isinstance(item, dict) and item.get('type') == 'text':
+                                text += item.get('text', '')
+                    if text:
+                        messages.append((role, text.strip().replace('\n', ' ')))
+            except:
+                pass
+except Exception as e:
+    print(f'Error reading session: {e}')
+    sys.exit(0)
+
+print(f'\033[1;34mName:\033[0m      {name}')
+print(f'\033[1;34mModified:\033[0m  {mtime}')
+print(f'\033[1;34mSize:\033[0m      {size / 1024:.1f} KB ({len(messages)} messages)')
+print(f'\033[1;34mFile:\033[0m      {os.path.basename(path)}')
+print('\033[1;36m' + '─' * 60 + '\033[0m')
+
+count = 0
+for role, text in messages:
+    if role in ('user', 'assistant'):
+        color = '\033[1;32m' if role == 'user' else '\033[1;35m'
+        prefix = f'{color}[{role.upper()}]\033[0m'
+        snippet = text[:120] + ('...' if len(text) > 120 else '')
+        print(f'{prefix} {snippet}')
+        count += 1
+        if count >= 12:
+            break
+" "$file"
+  exit 0
+fi
+
+# 2. Extract session list fast via python
+entries=$(python3 -c "
+import os, glob, json, time, sys
+
+session_dir = sys.argv[1]
+files = sorted(glob.glob(os.path.join(session_dir, '*.jsonl')), key=os.path.getmtime, reverse=True)
+
+for f in files:
+    mtime = time.strftime('%Y-%m-%d %H:%M', time.localtime(os.path.getmtime(f)))
+    name = ''
+    first_prompt = ''
+    size = os.path.getsize(f)
+
+    with open(f, 'r', errors='ignore') as fp:
+        for _ in range(40):
+            line = fp.readline()
+            if not line:
+                break
+            try:
+                data = json.loads(line)
+                t = data.get('type')
+                if t == 'session_info' and data.get('name'):
+                    name = data['name']
+                elif t == 'message' and data.get('message', {}).get('role') == 'user':
+                    if not first_prompt:
+                        c = data['message'].get('content')
+                        if isinstance(c, str):
+                            first_prompt = c.replace('\t', ' ').replace('\n', ' ')[:75]
+                        elif isinstance(c, list):
+                            for item in c:
+                                if isinstance(item, dict) and item.get('type') == 'text':
+                                    first_prompt = item.get('text', '').replace('\t', ' ').replace('\n', ' ')[:75]
+                                    break
+            except:
+                pass
+        if size > 16384:
+            fp.seek(max(0, size - 8192))
+            for line in fp:
+                try:
+                    data = json.loads(line)
+                    if data.get('type') == 'session_info' and data.get('name'):
+                        name = data['name']
+                except:
+                    pass
+    display = name if name else (first_prompt if first_prompt else os.path.basename(f))
+    print(f'{mtime}\t{display}\t{f}')
+" "$SESSION_DIR")
+
+if [ -z "$entries" ]; then
+  tmux display-message "No Pi sessions found in $SESSION_DIR"
+  exit 0
+fi
+
+# 3. Interactive FZF selector
+SCRIPT_PATH="$(realpath "$0")"
+output=$(printf '%s\n' "$entries" | fzf \
+  --delimiter='\t' \
+  --with-nth=1,2 \
+  --prompt='pi-session> ' \
+  --header='Enter: new window | Ctrl-O: current pane | Ctrl-N: new session | Ctrl-D: delete' \
+  --preview="$SCRIPT_PATH --preview {3}" \
+  --preview-window=right:55%:wrap \
+  --expect=ctrl-n,ctrl-d,ctrl-o \
+  --reverse \
+  --height=100%)
+
+[ -z "$output" ] && exit 0
+
+key=$(printf '%s\n' "$output" | sed -n '1p')
+selection=$(printf '%s\n' "$output" | sed -n '2p')
+
+# Handle Ctrl-N (New Session)
+if [ "$key" = "ctrl-n" ]; then
+  printf "Enter name for new session (leave blank for default): "
+  read -r session_name
+  if [ -n "$session_name" ]; then
+    tmux new-window -n "pi" -c "$CWD" "pi -n '$session_name'"
+  else
+    tmux new-window -n "pi" -c "$CWD" "pi"
+  fi
+  exit 0
+fi
+
+# Ensure selection exists for resume / delete
+[ -z "$selection" ] && exit 0
+session_file=$(printf '%s' "$selection" | cut -f3)
+session_name=$(printf '%s' "$selection" | cut -f2 | cut -c1-20)
+
+# Handle Ctrl-D (Delete Session)
+if [ "$key" = "ctrl-d" ]; then
+  printf "Delete session '%s'? [y/N]: " "$session_name"
+  read -r confirm
+  if [ "$confirm" = "y" ] || [ "$confirm" = "Y" ]; then
+    rm -f "$session_file"
+    # Also clean up per-session directory if present
+    session_id=$(basename "$session_file" .jsonl)
+    rm -rf "${SESSION_DIR}/${session_id}"
+    tmux display-message "Session deleted."
+  fi
+  exit 0
+fi
+
+# Handle Ctrl-O (Resume in current pane)
+if [ "$key" = "ctrl-o" ]; then
+  if [ -n "${TMUX:-}" ]; then
+    tmux send-keys "pi --session '$session_file'" C-m
+  else
+    exec pi --session "$session_file"
+  fi
+  exit 0
+fi
+
+# Default (Enter): Open resumed session in a new tmux window
+if [ -n "${TMUX:-}" ]; then
+  tmux new-window -n "pi:${session_name}" -c "$CWD" "pi --session '$session_file'"
+else
+  exec pi --session "$session_file"
+fi
