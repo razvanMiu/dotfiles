@@ -33,6 +33,7 @@
     "+ls"
   ],
   "shellPath": "/bin/zsh",
+  "shellCommandPrefix": "setopt nonomatch pipefail",
   "hideThinkingBlock": false,
   "theme": "dark",
   "cacheWarming": "streaming",
