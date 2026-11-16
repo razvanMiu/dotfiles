@@ -387,7 +387,6 @@ Pi packages, binary shims, caches, and live credentials are fully separated from
 ```bash
 export PI_CODING_AGENT_DIR="$XDG_DATA_HOME/pi/agent"
 export PI_CODING_AGENT_SESSION_DIR="$XDG_STATE_HOME/pi/sessions"
-export REMOTE_PI_HOME="$XDG_STATE_HOME/pi"
 ```
 
 - **`$XDG_CONFIG_HOME/pi/agent`**: Authored declarative configs only (`settings.json`, `mcp.json`, `extensions/`, `AGENTS.md`).
@@ -448,12 +447,12 @@ Prefer standard shared MCP files such as `~/.config/mcp/mcp.json` only after dec
 
 ### Current Pi settings
 
-`~/.config/pi/agent/settings.json` points Pi at shared skills through a portable relative path:
+`~/.config/pi/agent/settings.json` points Pi at shared skills through the absolute agent path:
 
 ```json
 {
   "enableSkillCommands": true,
-  "skills": ["../../agents/skills"],
+  "skills": ["~/.config/agents/skills"],
   "extensions": ["+builtin:mcp"]
 }
 ```

@@ -17,7 +17,7 @@ This directory contains shared agent resources used by Pi and any other agent ha
 ln -sfn ~/.config/agents ~/.agents
 ```
 
-Pi loads skills through `~/.agents/skills`, not through a Pi-specific path. This keeps the skills reusable across agent tools.
+Pi finds these skills through the `skills` key in `~/.config/pi/agent/settings.json`, which points at `~/.config/agents/skills`. Because the directory is plain Markdown, other agent tools can read the same tree instead of keeping their own copy.
 
 ## Local custom skills
 
