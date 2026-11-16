@@ -1,51 +1,255 @@
-#!/bin/sh
-# Fuzzy-select a project directory and attach/switch to a tmux session for it.
+#!/usr/bin/env bash
+# Fast Fzf-powered Project & Session Manager for tmux.
+# Supports switching active sessions, navigating current pane, opening in a new window, or creating a session.
 
-set -eu
+set -euo pipefail
+
+TARGET_PANE=$(tmux display-message -p "#{pane_id}" 2>/dev/null || true)
+CURRENT_DIR=$(tmux display-message -p "#{pane_current_path}" 2>/dev/null || pwd)
+SCRIPT_PATH="$(realpath "$0")"
+SCRIPT_DIR="$(dirname "$SCRIPT_PATH")"
 
 if ! command -v fzf >/dev/null 2>&1; then
   tmux display-message "fzf is required for project picker but not found on PATH."
   exit 1
 fi
 
-# Search roots for projects. Newline-separated to safely support paths with spaces.
-search_roots() {
-  if [ -n "${TMUX_PROJECT_ROOTS:-}" ]; then
-    printf '%s\n' "$TMUX_PROJECT_ROOTS" | tr ':' '\n'
-  else
-    cat <<EOF
-$HOME/.config
-$HOME/Work
-$HOME/Climb IT SRL
-$HOME/Code
-$HOME/Projects
-EOF
+# 1. Preview helper: Invoked by fzf preview option
+if [ "${1:-}" = "--preview" ]; then
+  item="${2:-}"
+  tmux_w="${3:-160}"
+
+  # If previewing an active tmux session
+  if [[ "$item" == \[session\]* ]]; then
+    s_name="${item#\[session\] }"
+    python3 -c "
+import sys, subprocess
+
+s = sys.argv[1]
+try:
+    tmux_w = int(sys.argv[2])
+except:
+    tmux_w = 160
+
+div_len = max(35, int((int(tmux_w * 0.90) - 2) * 0.50) - 10)
+
+C_RESET = '\033[0m'
+C_BOLD  = '\033[1m'
+C_BLUE  = '\033[1;34m'
+C_CYAN  = '\033[1;36m'
+C_GREEN = '\033[1;32m'
+C_DIM   = '\033[2m'
+
+print(f'{C_BOLD}Active Tmux Session:{C_RESET} {C_BLUE}{s}{C_RESET}')
+print(C_CYAN + '─' * div_len + C_RESET)
+try:
+    windows = subprocess.check_output(['tmux', 'list-windows', '-t', s, '-F', '#{window_index}: #{window_name} (#{window_panes} panes) #{?window_active,[active],}'], text=True).strip()
+    print(f'{C_BOLD}Windows:{C_RESET}')
+    for w in windows.split('\n'):
+        print(f'  {w}')
+except Exception as e:
+    print(f'Error inspecting session: {e}')
+" "$s_name" "$tmux_w"
+    exit 0
   fi
-}
 
-projects=$(
-  search_roots | while IFS= read -r root; do
-    [ -d "$root" ] || continue
-    find "$root" -mindepth 1 -maxdepth 4 \( -path '*/.git' -o -path '*/.jj' \) -type d -print 2>/dev/null \
-      | sed 's#/.git$##; s#/.jj$##'
-  done | awk '!seen[$0]++' | sort
-)
+  # Otherwise previewing a project directory
+  dir="$item"
+  [ -d "$dir" ] || { echo "Directory not found: $dir"; exit 0; }
 
-[ -n "$projects" ] || { printf 'No projects found in configured roots.\n' >&2; exit 1; }
+  python3 -c "
+import sys, os, subprocess
 
-selected=$(printf '%s\n' "$projects" | fzf --prompt='project> ' --height=80% --reverse --preview 'printf "{}\n\n"; git -C {} status --short --branch 2>/dev/null | head -80')
-[ -n "$selected" ] || exit 0
+path = sys.argv[1]
+try:
+    tmux_w = int(sys.argv[2])
+except:
+    tmux_w = 160
 
-base=$(basename "$selected")
-session=$(printf '%s' "$base" | tr '.:' '__' | tr -c '[:alnum:]_-' '_')
+div_len = max(35, int((int(tmux_w * 0.90) - 2) * 0.50) - 10)
+name = os.path.basename(path)
 
-if ! tmux has-session -t "$session" 2>/dev/null; then
-  tmux new-session -d -s "$session" -c "$selected"
-  tmux rename-window -t "$session:1" editor
+# Colors
+C_RESET = '\033[0m'
+C_BOLD  = '\033[1m'
+C_BLUE  = '\033[1;34m'
+C_CYAN  = '\033[1;36m'
+C_GREEN = '\033[1;32m'
+C_DIM   = '\033[2m'
+
+print(f'{C_BOLD}Project:{C_RESET} {C_BLUE}{name}{C_RESET}')
+print(f'{C_BOLD}Path:{C_RESET}    {path}')
+print(C_CYAN + '─' * div_len + C_RESET)
+
+# Git details if a git repo
+is_git = os.path.isdir(os.path.join(path, '.git')) or os.path.exists(os.path.join(path, '.git'))
+if is_git:
+    try:
+        branch = subprocess.check_output(['git', '-C', path, 'branch', '--show-current'], text=True, stderr=subprocess.DEVNULL).strip()
+        status = subprocess.check_output(['git', '-C', path, 'status', '--short', '--branch'], text=True, stderr=subprocess.DEVNULL).strip()
+        commits = subprocess.check_output(['git', '-C', path, 'log', '-n', '5', '--oneline'], text=True, stderr=subprocess.DEVNULL).strip()
+
+        print(f'{C_BOLD}Git Branch:{C_RESET} {C_GREEN}{branch or \"detached\"}{C_RESET}')
+        print('\n' + C_BOLD + 'Status:' + C_RESET)
+        if status:
+            for l in status.split('\n')[:8]:
+                print(f'  {l}')
+        else:
+            print(f'  {C_DIM}clean working tree{C_RESET}')
+
+        print('\n' + C_BOLD + 'Recent Commits:' + C_RESET)
+        if commits:
+            for c in commits.split('\n'):
+                print(f'  {C_DIM}{c}{C_RESET}')
+    except Exception as e:
+        print(f'{C_DIM}Git status unavailable: {e}{C_RESET}')
+else:
+    print(f'{C_DIM}(Non-git directory){C_RESET}\n')
+    try:
+        entries = sorted(os.listdir(path))[:12]
+        for e in entries:
+            print(f'  {e}')
+    except:
+        pass
+" "$dir" "$tmux_w"
+  exit 0
 fi
 
+# 2. Gather active tmux sessions & project directories
+active_sessions=()
 if [ -n "${TMUX:-}" ]; then
-  tmux switch-client -t "$session"
+  while IFS= read -r s; do
+    [ -n "$s" ] && active_sessions+=("[session] $s")
+  done < <(tmux list-sessions -F "#{session_name}" 2>/dev/null || true)
+fi
+
+search_roots=()
+if [ -n "${TMUX_PROJECT_ROOTS:-}" ]; then
+  IFS=':' read -r -a search_roots <<< "$TMUX_PROJECT_ROOTS"
 else
-  tmux attach-session -t "$session"
+  search_roots=(
+    "$HOME/.config"
+    "$HOME/Work"
+    "$HOME/Climb IT SRL"
+    "$HOME/Code"
+    "$HOME/Projects"
+  )
+fi
+
+valid_roots=()
+for r in "${search_roots[@]}"; do
+  [ -d "$r" ] && valid_roots+=("$r")
+done
+
+# Fast scanning: prefer fd if available, fallback to pruned find
+projects=()
+if command -v fd >/dev/null 2>&1; then
+  while IFS= read -r p; do
+    [ -n "$p" ] && projects+=("$p")
+  done < <(fd -H -t d '^\.(git|jj)$' "${valid_roots[@]}" \
+    --max-depth 4 \
+    -E 'node_modules' \
+    -E '.build' \
+    -E 'dist' \
+    -E '.cache' \
+    -E '.venv' 2>/dev/null \
+    | sed -E 's#/\.(git|jj)/?$##' | sort -u)
+else
+  while IFS= read -r p; do
+    [ -n "$p" ] && projects+=("$p")
+  done < <(
+    for root in "${valid_roots[@]}"; do
+      find "$root" -mindepth 1 -maxdepth 4 \
+        \( -name node_modules -o -name .build -o -name dist -o -name .cache -o -name .venv \) -prune -o \
+        \( -path '*/.git' -o -path '*/.jj' \) -type d -print 2>/dev/null \
+        | sed -E 's#/\.(git|jj)$##'
+    done | awk '!seen[$0]++' | sort
+  )
+fi
+
+# Combine sessions and projects
+all_items=()
+for s in "${active_sessions[@]}"; do
+  all_items+=("$s")
+done
+for p in "${projects[@]}"; do
+  all_items+=("$p")
+done
+
+[ ${#all_items[@]} -gt 0 ] || { tmux display-message "No sessions or projects found."; exit 0; }
+
+# 3. Interactive FZF Selector
+tmux_w=$(tmux display-message -p "#{client_width}" 2>/dev/null || echo 160)
+popup_w=$((tmux_w * 90 / 100))
+inner_w=$((popup_w - 2))
+list_w=$((inner_w - (inner_w * 50 / 100)))
+div_w=$((list_w - 4))
+[ "$div_w" -lt 30 ] && div_w=30
+divider=$(printf '─%.0s' $(seq 1 "$div_w"))
+
+header=$' \033[1;36m↵ Enter\033[0m \033[2mcurrent pane / switch session\033[0m   \033[38;5;244mEsc\033[0m \033[2mcancel\033[0m\n \033[1;35mC-w\033[0m \033[2mnew window\033[0m   \033[1;35mC-s\033[0m \033[2mnew session\033[0m\n\033[2m'"$divider"$'\033[0m'
+
+selected=$(printf '%s\n' "${all_items[@]}" | fzf \
+  --ansi \
+  --prompt='session/project> ' \
+  --header="$header" \
+  --preview="$SCRIPT_PATH --preview {} $tmux_w" \
+  --preview-window=right:50%:wrap \
+  --expect=ctrl-w,ctrl-s \
+  --reverse \
+  --height=100%)
+
+[ -z "$selected" ] && exit 0
+
+key=$(printf '%s\n' "$selected" | sed -n '1p')
+target=$(printf '%s\n' "$selected" | sed -n '2p')
+[ -z "$target" ] && exit 0
+
+# Case 1: Active tmux session selected
+if [[ "$target" == \[session\]* ]]; then
+  target_session="${target#\[session\] }"
+  if [ -n "${TMUX:-}" ]; then
+    tmux switch-client -t "$target_session"
+  else
+    tmux attach-session -t "$target_session"
+  fi
+  exit 0
+fi
+
+# Case 2: Project directory selected
+target_dir="$target"
+base=$(basename "$target_dir")
+session=$(printf '%s' "$base" | tr '.:' '__' | tr -c '[:alnum:]_-' '_')
+
+# Handle Ctrl-W: Open as a new window in CURRENT session
+if [ "$key" = "ctrl-w" ]; then
+  if [ -n "${TMUX:-}" ]; then
+    tmux new-window -c "$target_dir" -n "$base"
+  fi
+  exit 0
+fi
+
+# Handle Ctrl-S: Open in dedicated tmux SESSION
+if [ "$key" = "ctrl-s" ]; then
+  if ! tmux has-session -t "$session" 2>/dev/null; then
+    tmux new-session -d -s "$session" -c "$target_dir"
+  fi
+  if [ -n "${TMUX:-}" ]; then
+    tmux switch-client -t "$session"
+  else
+    tmux attach-session -t "$session"
+  fi
+  exit 0
+fi
+
+# Default (Enter): Open in CURRENT pane (terminate active command first, then cd)
+if [ -n "${TMUX:-}" ]; then
+  "$SCRIPT_DIR/terminate-pane-process" "$TARGET_PANE"
+  if [ -n "$TARGET_PANE" ]; then
+    tmux send-keys -t "$TARGET_PANE" "cd '$target_dir'" C-m
+  else
+    tmux send-keys "cd '$target_dir'" C-m
+  fi
+else
+  cd "$target_dir"
 fi

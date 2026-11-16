@@ -1,31 +1,35 @@
 #!/usr/bin/env bash
 # Fast Fzf-powered Pi session picker for tmux.
-# Allows browsing, previewing, resuming, creating, and deleting Pi sessions.
+# Allows browsing, previewing, resuming, creating, archiving, and deleting Pi sessions.
 
 set -euo pipefail
 
-SESSION_DIR="${PI_CODING_AGENT_SESSION_DIR:-$HOME/.local/state/pi/sessions}"
-CWD="${1:-$PWD}"
+BASE_SESSION_DIR="${PI_CODING_AGENT_SESSION_DIR:-$HOME/.local/state/pi/sessions}"
+SCRIPT_PATH="$(realpath "$0")"
+SCRIPT_DIR="$(dirname "$SCRIPT_PATH")"
 
-if ! command -v fzf >/dev/null 2>&1; then
-  tmux display-message "fzf is required for pi-sessions but not found on PATH."
-  exit 1
-fi
+# shellcheck source=lib/pi-tmux.sh
+. "$SCRIPT_DIR/lib/pi-tmux.sh"
 
-if [ ! -d "$SESSION_DIR" ]; then
-  tmux display-message "Session directory not found: $SESSION_DIR"
-  exit 1
-fi
+CWD=$(pi_current_dir)
 
 # 1. Preview helper: Invoked by fzf preview option with the session file path
 if [ "${1:-}" = "--preview" ]; then
   file="${2:-}"
+  tmux_w="${3:-160}"
   [ -f "$file" ] || { echo "File not found: $file"; exit 0; }
 
   python3 -c "
 import sys, json, os, time
 
+sys.dont_write_bytecode = True
+sys.path.insert(0, sys.argv[-1])
+from pi_preview import C_BLUE, C_CYAN, C_DIM, C_GREEN, C_MAGENTA, C_RESET, parse_tmux_width, preview_div_len
+
 path = sys.argv[1]
+tmux_w = parse_tmux_width(sys.argv[2])
+div_len = preview_div_len(tmux_w)
+
 size = os.path.getsize(path)
 mtime = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(os.path.getmtime(path)))
 
@@ -58,91 +62,293 @@ except Exception as e:
     print(f'Error reading session: {e}')
     sys.exit(0)
 
-print(f'\033[1;34mName:\033[0m      {name}')
-print(f'\033[1;34mModified:\033[0m  {mtime}')
-print(f'\033[1;34mSize:\033[0m      {size / 1024:.1f} KB ({len(messages)} messages)')
-print(f'\033[1;34mFile:\033[0m      {os.path.basename(path)}')
-print('\033[1;36m' + '─' * 60 + '\033[0m')
+print(f'{C_BLUE}Name:{C_RESET}      {name}')
+print(f'{C_BLUE}Modified:{C_RESET}  {mtime}')
+print(f'{C_BLUE}Size:{C_RESET}      {size / 1024:.1f} KB ({len(messages)} messages)')
+print(f'{C_BLUE}File:{C_RESET}      {os.path.basename(path)}')
+
+# Check if session is actively running in a tmux pane
+fleet_dir = os.path.expanduser('~/.local/state/pi/fleet')
+act = None
+if os.path.isdir(fleet_dir):
+    for ff in os.listdir(fleet_dir):
+        if ff.endswith('.json'):
+            try:
+                with open(os.path.join(fleet_dir, ff), 'r') as ffp: dd = json.load(ffp)
+                if dd.get('sessionFile') == path:
+                    pid = dd.get('pid')
+                    if pid:
+                        try:
+                            os.kill(pid, 0)
+                            act = dd
+                            break
+                        except OSError: pass
+            except: pass
+
+if act:
+    t = act.get('tmux', {})
+    print(C_GREEN + '═' * div_len + C_RESET)
+    print(f\"{C_GREEN}● ACTIVE IN TMUX: Session '{t.get('session')}', Window {t.get('windowIndex')} ({t.get('windowName')}), Pane {t.get('paneId')}{C_RESET}\")
+    print(f\"{C_DIM}State: {act.get('state')} | Detail: {str(act.get('stateDetail', ''))[:55]}{C_RESET}\")
+
+print(C_CYAN + '─' * div_len + C_RESET)
 
 count = 0
 for role, text in messages:
     if role in ('user', 'assistant'):
-        color = '\033[1;32m' if role == 'user' else '\033[1;35m'
-        prefix = f'{color}[{role.upper()}]\033[0m'
+        color = C_GREEN if role == 'user' else C_MAGENTA
+        prefix = f'{color}[{role.upper()}]{C_RESET}'
         snippet = text[:120] + ('...' if len(text) > 120 else '')
         print(f'{prefix} {snippet}')
         count += 1
         if count >= 12:
             break
-" "$file"
+" "$file" "$tmux_w" "$SCRIPT_DIR/lib"
   exit 0
 fi
 
-# 2. Extract session list fast via python
-entries=$(python3 -c "
+# 2. List helper: Formats sessions for fzf input and live reloads
+if [ "${1:-}" = "--list" ]; then
+  is_arc="${2:-0}"
+  tmux_w="${3:-160}"
+
+  if [ "$is_arc" = "1" ]; then
+    s_dir="${BASE_SESSION_DIR}/archive"
+  else
+    s_dir="$BASE_SESSION_DIR"
+  fi
+
+  [ -d "$s_dir" ] || exit 0
+
+  python3 -c "
 import os, glob, json, time, sys
 
-session_dir = sys.argv[1]
-files = sorted(glob.glob(os.path.join(session_dir, '*.jsonl')), key=os.path.getmtime, reverse=True)
+sys.dont_write_bytecode = True
+sys.path.insert(0, sys.argv[-1])
+from pi_preview import parse_tmux_width, popup_widths
 
-for f in files:
-    mtime = time.strftime('%Y-%m-%d %H:%M', time.localtime(os.path.getmtime(f)))
+session_dir = sys.argv[1]
+tmux_w = parse_tmux_width(sys.argv[2])
+
+_popup_w, inner_w = popup_widths(tmux_w)
+list_w = int(inner_w - (inner_w * 0.50))
+
+tag_w = 16
+p_w = 14
+task_w = max(24, list_w - p_w - tag_w - 26)
+
+def get_session_details(path):
+    size = os.path.getsize(path)
+    mtime = time.strftime('%Y-%m-%d %H:%M', time.localtime(os.path.getmtime(path)))
     name = ''
     first_prompt = ''
-    size = os.path.getsize(f)
 
-    with open(f, 'r', errors='ignore') as fp:
-        for _ in range(40):
-            line = fp.readline()
-            if not line:
-                break
-            try:
-                data = json.loads(line)
-                t = data.get('type')
-                if t == 'session_info' and data.get('name'):
-                    name = data['name']
-                elif t == 'message' and data.get('message', {}).get('role') == 'user':
-                    if not first_prompt:
+    # Reverse search for session_info (scanning chunks from EOF backwards)
+    chunk_size = 65536
+    with open(path, 'rb') as fp:
+        pos = size
+        buffer = b''
+        while pos > 0 and not name:
+            read_size = min(chunk_size, pos)
+            pos -= read_size
+            fp.seek(pos)
+            chunk = fp.read(read_size)
+            buffer = chunk + buffer
+            lines = buffer.split(b'\n')
+            buffer = lines[0]
+            for l in reversed(lines[1:]):
+                if b'\"session_info\"' in l:
+                    try:
+                        d = json.loads(l.decode('utf-8', errors='ignore'))
+                        if d.get('type') == 'session_info' and d.get('name'):
+                            name = d['name']
+                            break
+                    except:
+                        pass
+
+    # If no name found, get first prompt from first 30 lines
+    if not name:
+        with open(path, 'r', errors='ignore') as fp:
+            for _ in range(30):
+                line = fp.readline()
+                if not line: break
+                try:
+                    data = json.loads(line)
+                    if data.get('type') == 'message' and data.get('message', {}).get('role') == 'user':
                         c = data['message'].get('content')
                         if isinstance(c, str):
                             first_prompt = c.replace('\t', ' ').replace('\n', ' ')[:75]
+                            break
                         elif isinstance(c, list):
                             for item in c:
                                 if isinstance(item, dict) and item.get('type') == 'text':
                                     first_prompt = item.get('text', '').replace('\t', ' ').replace('\n', ' ')[:75]
                                     break
-            except:
-                pass
-        if size > 16384:
-            fp.seek(max(0, size - 8192))
-            for line in fp:
-                try:
-                    data = json.loads(line)
-                    if data.get('type') == 'session_info' and data.get('name'):
-                        name = data['name']
+                            if first_prompt: break
                 except:
                     pass
-    display = name if name else (first_prompt if first_prompt else os.path.basename(f))
-    print(f'{mtime}\t{display}\t{f}')
-" "$SESSION_DIR")
 
-if [ -z "$entries" ]; then
-  tmux display-message "No Pi sessions found in $SESSION_DIR"
+    display = name if name else (first_prompt if first_prompt else os.path.basename(path))
+    project = display.split('_')[0] if '_' in display else 'other'
+    task = display[len(project)+1:] if '_' in display else display
+
+    return {
+        'path': path,
+        'mtime': mtime,
+        'raw_mtime': os.path.getmtime(path),
+        'display': display,
+        'project': project,
+        'task': task
+    }
+
+files = glob.glob(os.path.join(session_dir, '*.jsonl'))
+sessions = [get_session_details(f) for f in files]
+
+# Scan active sessions from fleet
+fleet_dir = os.path.expanduser('~/.local/state/pi/fleet')
+active_map = {}
+if os.path.isdir(fleet_dir):
+    for f in glob.glob(os.path.join(fleet_dir, '*.json')):
+        try:
+            with open(f, 'r') as fp: d = json.load(fp)
+            pid = d.get('pid')
+            if pid:
+                try: os.kill(pid, 0)
+                except OSError: continue
+                sfile = d.get('sessionFile')
+                if sfile: active_map[sfile] = d
+        except: pass
+
+sessions.sort(key=lambda s: (s['project'].lower(), -s['raw_mtime']))
+
+for s in sessions:
+    path = s['path']
+    is_act = path in active_map
+    act_data = active_map.get(path, {})
+    act_tmux = act_data.get('tmux', {})
+    t_sess = act_tmux.get('session', '')
+    t_win = act_tmux.get('windowIndex', '')
+    t_name = act_tmux.get('windowName', '')
+    t_pane = act_tmux.get('paneId', '')
+
+    marker = '●' if is_act else ' '
+    win_tag = f'(win {t_win}:{t_name})' if is_act and t_win else ''
+    task_str = f\"{s['task'][:task_w]:<{task_w}}\"
+    tag_str = f\"{win_tag:<{tag_w}}\" if win_tag else ''
+
+    display_col = f\"{marker} {s['mtime']}  {s['project'][:p_w]:<{p_w}}  {task_str}  {tag_str}\".rstrip()
+    is_act_flag = '1' if is_act else '0'
+
+    print(f\"{display_col}\\t{path}\\t{is_act_flag}\\t{t_sess}\\t{t_win}\\t{t_pane}\\t{s['display']}\")
+" "$s_dir" "$tmux_w" "$SCRIPT_DIR/lib"
   exit 0
 fi
 
-# 3. Interactive FZF selector
-SCRIPT_PATH="$(realpath "$0")"
+# 3. Actions invoked live from fzf via --bind (silent, zero-flicker)
+if [ "${1:-}" = "--do-archive" ]; then
+  session_file="${2:-}"
+  is_active="${3:-0}"
+  [ -f "$session_file" ] || exit 0
+
+  session_name=$(basename "$session_file" .jsonl)
+  if [ "$is_active" = "1" ]; then
+    tmux display-message -d 1500 "Cannot archive active session '$session_name' while running."
+    exit 0
+  fi
+
+  archive_dir="${BASE_SESSION_DIR}/archive"
+  mkdir -p "$archive_dir"
+  mv "$session_file" "${archive_dir}/"
+  [ -d "${BASE_SESSION_DIR}/${session_name}" ] && mv "${BASE_SESSION_DIR}/${session_name}" "${archive_dir}/"
+  exit 0
+fi
+
+if [ "${1:-}" = "--do-unarchive" ]; then
+  session_file="${2:-}"
+  [ -f "$session_file" ] || exit 0
+
+  session_name=$(basename "$session_file" .jsonl)
+  mkdir -p "$BASE_SESSION_DIR"
+  mv "$session_file" "${BASE_SESSION_DIR}/"
+  archive_dir="${BASE_SESSION_DIR}/archive"
+  [ -d "${archive_dir}/${session_name}" ] && mv "${archive_dir}/${session_name}" "${BASE_SESSION_DIR}/"
+  exit 0
+fi
+
+if [ "${1:-}" = "--do-delete" ]; then
+  session_file="${2:-}"
+  [ -f "$session_file" ] || exit 0
+
+  session_name=$(basename "$session_file" .jsonl)
+  printf "\nDelete session '%s'? [y/N]: " "$session_name"
+  read -r confirm
+  if [ "$confirm" = "y" ] || [ "$confirm" = "Y" ]; then
+    dir="$(dirname "$session_file")"
+    rm -f "$session_file"
+    rm -rf "${dir}/${session_name}"
+  fi
+  exit 0
+fi
+
+# 4. Interactive Main
+IS_ARCHIVE=0
+if [ "${1:-}" = "--archive" ]; then
+  IS_ARCHIVE=1
+  shift
+fi
+
+if [ "$IS_ARCHIVE" = "1" ]; then
+  SESSION_DIR="${BASE_SESSION_DIR}/archive"
+  mkdir -p "$SESSION_DIR"
+else
+  SESSION_DIR="$BASE_SESSION_DIR"
+fi
+
+if ! command -v fzf >/dev/null 2>&1; then
+  tmux display-message "fzf is required for pi-sessions but not found on PATH."
+  exit 1
+fi
+
+tmux_w=$(pi_client_width)
+entries=$("$SCRIPT_PATH" --list "$IS_ARCHIVE" "$tmux_w")
+
+if [ -z "$entries" ]; then
+  if [ "$IS_ARCHIVE" = "1" ]; then
+    tmux display-message "No archived Pi sessions found in $SESSION_DIR"
+  else
+    tmux display-message "No Pi sessions found in $SESSION_DIR"
+  fi
+  exit 0
+fi
+
+divider=$(pi_list_divider "$tmux_w")
+
+if [ "$IS_ARCHIVE" = "1" ]; then
+  prompt="pi-archive> "
+  expect_keys="ctrl-w,ctrl-s"
+  header=$' \033[1;36m↵ Enter\033[0m \033[2munarchive & resume\033[0m   \033[38;5;244mEsc\033[0m \033[2mcancel\033[0m\n \033[1;35mC-u\033[0m \033[2munarchive\033[0m   \033[1;35mC-w\033[0m \033[2mwindow\033[0m   \033[1;35mC-s\033[0m \033[2msession\033[0m   \033[1;35mC-d\033[0m \033[2mdelete\033[0m\n\033[2m'"$divider"$'\033[0m'
+  bind_actions="ctrl-u:execute-silent('$SCRIPT_PATH' --do-unarchive {2})+reload('$SCRIPT_PATH' --list 1 $tmux_w)"
+  bind_actions+=",ctrl-d:execute('$SCRIPT_PATH' --do-delete {2})+reload('$SCRIPT_PATH' --list 1 $tmux_w)"
+else
+  prompt="pi-session> "
+  expect_keys="ctrl-n,ctrl-w,ctrl-s"
+  header=$' \033[1;36m↵ Enter\033[0m \033[2mresume (or jump if active)\033[0m   \033[38;5;244mEsc\033[0m \033[2mcancel\033[0m\n \033[1;35mC-w\033[0m \033[2mwindow\033[0m   \033[1;35mC-s\033[0m \033[2msession\033[0m   \033[1;35mC-n\033[0m \033[2mnew\033[0m   \033[1;35mC-a\033[0m \033[2marchive\033[0m   \033[1;35mC-d\033[0m \033[2mdelete\033[0m\n\033[2m'"$divider"$'\033[0m'
+  bind_actions="ctrl-a:execute-silent('$SCRIPT_PATH' --do-archive {2} {3})+reload('$SCRIPT_PATH' --list 0 $tmux_w)"
+  bind_actions+=",ctrl-d:execute('$SCRIPT_PATH' --do-delete {2})+reload('$SCRIPT_PATH' --list 0 $tmux_w)"
+fi
+
 output=$(printf '%s\n' "$entries" | fzf \
+  --ansi \
   --delimiter='\t' \
-  --with-nth=1,2 \
-  --prompt='pi-session> ' \
-  --header='Enter: new window | Ctrl-O: current pane | Ctrl-N: new session | Ctrl-D: delete' \
-  --preview="$SCRIPT_PATH --preview {3}" \
-  --preview-window=right:55%:wrap \
-  --expect=ctrl-n,ctrl-d,ctrl-o \
+  --with-nth=1 \
+  --prompt="$prompt" \
+  --header="$header" \
+  --preview="$SCRIPT_PATH --preview {2} $tmux_w" \
+  --preview-window=right:50%:wrap \
+  --expect="$expect_keys" \
+  --bind="$bind_actions" \
   --reverse \
-  --height=100%)
+  --height=100%) || true
 
 [ -z "$output" ] && exit 0
 
@@ -161,38 +367,67 @@ if [ "$key" = "ctrl-n" ]; then
   exit 0
 fi
 
-# Ensure selection exists for resume / delete
+# Ensure selection exists for resume / window / session
 [ -z "$selection" ] && exit 0
-session_file=$(printf '%s' "$selection" | cut -f3)
-session_name=$(printf '%s' "$selection" | cut -f2 | cut -c1-20)
 
-# Handle Ctrl-D (Delete Session)
-if [ "$key" = "ctrl-d" ]; then
-  printf "Delete session '%s'? [y/N]: " "$session_name"
-  read -r confirm
-  if [ "$confirm" = "y" ] || [ "$confirm" = "Y" ]; then
-    rm -f "$session_file"
-    # Also clean up per-session directory if present
-    session_id=$(basename "$session_file" .jsonl)
-    rm -rf "${SESSION_DIR}/${session_id}"
-    tmux display-message "Session deleted."
-  fi
-  exit 0
+session_file=$(printf '%s' "$selection" | cut -f2)
+is_active=$(printf '%s' "$selection" | cut -f3)
+t_sess=$(printf '%s' "$selection" | cut -f4)
+t_win=$(printf '%s' "$selection" | cut -f5)
+t_pane=$(printf '%s' "$selection" | cut -f6)
+raw_display=$(printf '%s' "$selection" | cut -f7)
+session_name=$(printf '%s' "$raw_display" | cut -c1-24)
+
+# If in archive mode and user chosen to open/resume, unarchive first
+if [ "$IS_ARCHIVE" = "1" ]; then
+  mkdir -p "$BASE_SESSION_DIR"
+  dest_file="${BASE_SESSION_DIR}/$(basename "$session_file")"
+  mv "$session_file" "$dest_file"
+  session_id=$(basename "$session_file" .jsonl)
+  [ -d "${SESSION_DIR}/${session_id}" ] && mv "${SESSION_DIR}/${session_id}" "${BASE_SESSION_DIR}/"
+  session_file="$dest_file"
+  tmux display-message "Session '$session_name' unarchived."
 fi
 
-# Handle Ctrl-O (Resume in current pane)
-if [ "$key" = "ctrl-o" ]; then
+# Handle Ctrl-W (Open in new window)
+if [ "$key" = "ctrl-w" ]; then
   if [ -n "${TMUX:-}" ]; then
-    tmux send-keys "pi --session '$session_file'" C-m
+    pi_open_in_new_window "$CWD" "pi:${session_name}" "pi --session '$session_file'"
   else
     exec pi --session "$session_file"
   fi
   exit 0
 fi
 
-# Default (Enter): Open resumed session in a new tmux window
+# Handle Ctrl-S (Open in new tmux session)
+if [ "$key" = "ctrl-s" ]; then
+  target_s="pi-${session_name}"
+  if [ -n "${TMUX:-}" ]; then
+    if ! pi_session_exists "$target_s"; then
+      pi_session_create_detached "$target_s" "$CWD" "pi --session '$session_file'"
+    fi
+    pi_session_focus "$target_s"
+  else
+    tmux new-session -s "$target_s" -c "$CWD" "pi --session '$session_file'"
+  fi
+  exit 0
+fi
+
+# Default (Enter):
+# Case A: Session is ALREADY ACTIVE in a pane -> JUMP DIRECTLY TO IT!
+if [ "$is_active" = "1" ] && [ -n "$t_pane" ]; then
+  if [ -n "${TMUX:-}" ]; then
+    [ -n "$t_sess" ] && tmux switch-client -t "$t_sess" 2>/dev/null || true
+    [ -n "$t_win" ] && tmux select-window -t "${t_sess}:${t_win}" 2>/dev/null || true
+    tmux select-pane -t "$t_pane" 2>/dev/null || true
+  fi
+  exit 0
+fi
+
+# Case B: Session is INACTIVE -> Resume in current pane
 if [ -n "${TMUX:-}" ]; then
-  tmux new-window -n "pi:${session_name}" -c "$CWD" "pi --session '$session_file'"
+  pi_open_in_pane "pi --session '$session_file'"
 else
   exec pi --session "$session_file"
 fi
+exit 0

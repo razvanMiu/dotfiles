@@ -8,12 +8,12 @@ C-b g        show this help (cheatsheet)
 C-b G        Lazygit popup in current repo
 C-b a        floating Pi scratchpad (persists in-memory; C-b d hides, /exit quits)
 C-b e        floating scratch shell (persists in-memory; C-b d hides, exit quits)
-C-b p        project picker: attach/create tmux session for a repo
-C-b o        SessionX: switch/create sessions and projects
+C-b p        Pi Sessions popup (resume, new window/session, create, delete)
+C-b s        Sessions & Projects popup (switch session, open in pane/window/session)
+C-b f        Pi Fleet Controller (live agents & subagents, jump, live tail, interrupt)
 C-b Space    quick toggle between last two active windows
 C-b BSpace   quick toggle between last two active sessions
 C-b u        pick/open URL from pane history (macOS browser)
-C-b f        fuzzy-filter scrollback; selected line copied to macOS clipboard
 C-b /        native scrollback search, jumps in copy-mode
 C-b r        reload tmux config
 C-b C-s      save tmux session/layout state
@@ -43,10 +43,12 @@ C-b T        set current pane title
 C-b x        close pane
 C-b z        zoom/unzoom current pane
 
-## Sessions
+## Sessions & Projects
 
-C-b o        fuzzy switch/create via SessionX
-C-b s        built-in session picker
+C-b s        fuzzy switch active sessions or open projects
+C-b p        browse/resume Pi agent sessions (Ctrl-A to archive)
+C-b P        browse/unarchive Pi sessions archive (Ctrl-U to unarchive)
+C-b f        Pi Fleet Controller (real-time agent status, jump, live tail)
 C-b $        rename session
 C-b d        detach
 
@@ -62,7 +64,6 @@ tmux kill-session -t name        kill session
 
 C-b [        enter copy mode; freezes this client's live pane view
 C-b /        search scrollback and jump to match
-C-b f        fuzzy-filter scrollback; copy selected line to clipboard
 h/j/k/l      move cursor one step
 C-u/C-d      animated 16-line scroll up/down
 PageUp/Down   page up/down, large jump
@@ -72,12 +73,17 @@ v            begin selection
 y            copy selection to clipboard
 q            quit copy mode
 
-## SessionX popup
+## Popup Controls Standard (Pi Sessions & Projects)
 
-C-b o        open
-Type name    filter sessions/projects, Enter switches or creates
-Ctrl-w       window mode
-Ctrl-t       tree mode
-Ctrl-x       browse ~/.config
-?            toggle preview
-Alt-Backspace / configured kill key: delete selected session
+Enter        Open in current pane (gracefully terminates running command first)
+Ctrl-w       Open in new Window (matches prefix c)
+Ctrl-s       Open in new Session (matches prefix s)
+Esc / Ctrl-c Cancel / dismiss popup
+
+## Pi Fleet Controller Controls (prefix f)
+
+Enter        Jump to agent or subagent pane
+Ctrl-t       Zoom preview pane (50% -> 75% -> 99% full-screen with zero flicker)
+Ctrl-w       Open live tail in a side split pane (42% width)
+Ctrl-k       Interrupt running agent or targeted subagent
+Esc / Ctrl-c Close popup

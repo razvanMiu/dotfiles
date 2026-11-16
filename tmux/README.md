@@ -8,7 +8,7 @@ XDG-friendly tmux setup for moving from kitty tabs to `st` + tmux.
 - Plugin/vendor code: `~/.local/share/tmux/plugins`
 - Saved session state: `~/.local/state/tmux/resurrect`
 - Config is split under `~/.config/tmux/conf.d/`; `tmux.conf` is only the source order
-- Scripts: `~/.config/tmux/scripts/git-branch`, `project-session`, `open-url`, `find-scrollback`, `sessionx-launch`
+- Scripts: `~/.config/tmux/scripts/git-branch`, `project-session`, `open-url`, `terminate-pane-process`, `pi-sessions`, `pi-archive`, `pi-fleet`
 - Status helpers: `~/.config/tmux/status/git_branch.conf`
 
 ## Dependencies
@@ -33,7 +33,6 @@ Required plugin directories:
 
 ```text
 ~/.local/share/tmux/plugins/tmux
-~/.local/share/tmux/plugins/tmux-sessionx
 ~/.local/share/tmux/plugins/tmux-sensible
 ~/.local/share/tmux/plugins/tmux-yank
 ~/.local/share/tmux/plugins/vim-tmux-navigator
@@ -65,11 +64,12 @@ The scheme mirrors the rest of the desktop: dwm owns `Super`, rofi owns `Super+S
 
 - `C-b g`: workflow cheat sheet popup
 - `C-b ?`: raw tmux key table
-- `C-b o`: SessionX fuzzy session/window/project picker
-- `C-b p`: project picker that attaches/creates a tmux session for a repo
+- `C-b s`: Sessions & Projects manager (switch sessions, open projects in current pane, new window, or new session)
+- `C-b p`: Pi Sessions popup (browse/resume Pi agent sessions)
+- `C-b f`: Pi Fleet Controller popup (monitor running agents/subagents, jump to pane, live tail, interrupt)
 - `C-b e`: scratch shell popup in current directory
+- `C-b a`: Pi ephemeral scratchpad popup
 - `C-b u`: pick/open URL from pane history
-- `C-b f`: fuzzy-filter scrollback and copy selected line
 - `C-b /`: native scrollback search in copy-mode
 - `C-b C-s` / `C-b C-r`: explicit tmux-resurrect save/restore
 - `C-b |`: horizontal split in current directory
@@ -80,4 +80,4 @@ The scheme mirrors the rest of the desktop: dwm owns `Super`, rofi owns `Super+S
 - `C-b r`: reload config
 - status-right: pane directory and Catppuccin-shaped current git branch/dirty marker when inside a repo
 - pane borders show each pane's current directory, plus manual pane title when set with `C-b T`, so inactive panes keep visible context
-- copy/search: `C-b /` native search, `C-b f` fuzzy-filter/copy a line, `C-u/C-d` animated 16-line scroll, `v` begins selection, `y` copies to clipboard
+- copy/search: `C-b /` native search, `C-u/C-d` animated 16-line scroll, `v` begins selection, `y` copies to clipboard
