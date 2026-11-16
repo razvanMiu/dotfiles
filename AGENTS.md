@@ -1,0 +1,15 @@
+# Dotfiles Project Instructions
+
+Scope: this repository only (`~/.config`). The global instructions in `~/.config/agents/AGENTS.md` still apply; this file adds what is specific to these dotfiles.
+
+## Layout contract
+
+- Keep stateless config in `~/.config`, state in `~/.local/state`, cache in `~/.cache`, and vendor/runtime packages in `~/.local/share`.
+- Authored configuration lives here and is tracked; tool-generated state, credentials, packages, and caches are ignored or relocated to XDG paths.
+- Document non-obvious configuration boundaries in `docs/adr/` with the decision, the rejected alternatives, and the consequences.
+
+## Gates in this repository
+
+- Run `scripts/check-dotfiles-safety --quiet` and `scripts/check-dotfiles-lint` before finalizing; `git diff --check` catches whitespace.
+- The tracked pre-commit hook in `.githooks/` runs both, so a commit that fails either is rejected.
+- Never commit credentials: `.gitignore` is a default-deny allowlist, and secrets belong in `with-secrets`.

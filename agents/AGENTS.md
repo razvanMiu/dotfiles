@@ -44,6 +44,5 @@ Production rigor: verify behavior in source or primary docs before editing, pres
 - **Autonomous within hard boundaries**: Plan first, then execute autonomously inside deterministic safety gates.
 - **Secrets**: Never commit, echo, or ask the user to paste API keys, tokens, or credentials into chat; never inspect `.env` files directly. Run credentialed commands (services, APIs, Redmine, deployment, DB, private registries) via `with-secrets -- <command>`. If a command fails with missing keys or 401 Unauthorized, re-run with `with-secrets -- <command>` instead of asking for credentials.
 - **Supply chain**: Treat MCP servers, agent skills, and plugins as executable supply-chain code. Prefer pinned versions (`@version` / commit SHA) from reviewed sources; never install unapproved plugins or MCP servers.
-- **Dotfiles (`~/.config`) rules**: Keep stateless config in `~/.config`, state in `~/.local/state`, cache in `~/.cache`, and vendor/runtime packages in `~/.local/share`. When editing `~/.config`, run `scripts/check-dotfiles-safety --quiet` and `git diff --check` before finalizing, and document non-obvious configuration boundaries in `docs/adr/`.
 
 Canonical marker: `xdg-agent-canonical-v2`.
