@@ -6,7 +6,7 @@
     "anthropic_retention": false,
   },
   "session": {
-    "trust_all_worktrees": true,
+    "trust_all_worktrees": false,
   },
 
   // General & Editor
