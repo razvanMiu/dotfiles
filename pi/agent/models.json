@@ -1,6 +1,31 @@
 {
   "$schema": "https://pi.dev/schemas/models.schema.json",
   "providers": {
+    "ollama-cloud": {
+      "modelOverrides": {
+        "deepseek-v4.1-flash": {
+          "inputLimits": {
+            "images": {
+              "resize": { "maxWidth": 1400, "maxHeight": 1400, "maxBytes": 400000, "jpegQuality": 75 }
+            }
+          }
+        },
+        "minimax-m3.1-flash": {
+          "inputLimits": {
+            "images": {
+              "resize": { "maxWidth": 1400, "maxHeight": 1400, "maxBytes": 400000, "jpegQuality": 75 }
+            }
+          }
+        },
+        "glm-5.3-flash": {
+          "inputLimits": {
+            "images": {
+              "resize": { "maxWidth": 1400, "maxHeight": 1400, "maxBytes": 400000, "jpegQuality": 75 }
+            }
+          }
+        }
+      }
+    },
     "eea-inhouse": {
       "name": "EEA In-House",
       "baseUrl": "https://llmgw.eea.europa.eu/v1",
