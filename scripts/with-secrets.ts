@@ -4,7 +4,11 @@ import { execFileSync, spawn } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
-const BWS_CONTROL_KEYS = ["BWS_ACCESS_TOKEN", "BWS_PROJECT_ID", "BWS_SERVER_URL"] as const;
+const BWS_CONTROL_KEYS = [
+  "BWS_ACCESS_TOKEN",
+  "BWS_PROJECT_ID",
+  "BWS_SERVER_URL",
+] as const;
 
 type Env = Record<string, string>;
 type BwsSecret = { id: string; key: string; value: string };
@@ -22,23 +26,31 @@ type SecretRef = {
 
 const options = parseArgs(process.argv.slice(2));
 
-const configDir = process.env.XDG_CONFIG_HOME ?? join(process.env.HOME ?? "", ".config");
+const configDir =
+  process.env.XDG_CONFIG_HOME ?? join(process.env.HOME ?? "", ".config");
 const globalEnvFile = join(configDir, ".env");
 const cwd = process.cwd();
-const localEnvFile = options.envFile ?? (cwd !== configDir ? join(cwd, ".env") : undefined);
+const localEnvFile =
+  options.envFile ?? (cwd !== configDir ? join(cwd, ".env") : undefined);
 
 if (options.envFile && !existsSync(options.envFile)) {
   fail(`specified env file missing: ${options.envFile}`);
 }
 
-const globalEnv = !options.noGlobalEnv && existsSync(globalEnvFile) ? loadDotEnv(globalEnvFile) : {};
-const localEnv = localEnvFile && existsSync(localEnvFile) ? loadDotEnv(localEnvFile) : {};
+const globalEnv =
+  !options.noGlobalEnv && existsSync(globalEnvFile)
+    ? loadDotEnv(globalEnvFile)
+    : {};
+const localEnv =
+  localEnvFile && existsSync(localEnvFile) ? loadDotEnv(localEnvFile) : {};
 
 if (Object.keys(globalEnv).length === 0 && Object.keys(localEnv).length === 0) {
   if (options.noGlobalEnv) {
     fail(`no local .env found at ${localEnvFile ?? "./.env"}`);
   } else {
-    fail(`no .env found at global (${globalEnvFile}) or local (${localEnvFile ?? "./.env"})`);
+    fail(
+      `no .env found at global (${globalEnvFile}) or local (${localEnvFile ?? "./.env"})`,
+    );
   }
 }
 
@@ -193,9 +205,19 @@ function loadDotEnv(path: string): Env {
   return env;
 }
 
-const ESCAPES: Record<string, string> = { n: "\n", r: "\r", t: "\t", '"': '"', "\\": "\\" };
+const ESCAPES: Record<string, string> = {
+  n: "\n",
+  r: "\r",
+  t: "\t",
+  '"': '"',
+  "\\": "\\",
+};
 
-function parseDotEnvValue(value: string, path: string, lineNumber: number): string {
+function parseDotEnvValue(
+  value: string,
+  path: string,
+  lineNumber: number,
+): string {
   if (value.length < 2) return value;
 
   const quote = value[0];
@@ -203,7 +225,9 @@ function parseDotEnvValue(value: string, path: string, lineNumber: number): stri
 
   if ((quote === '"' || quote === "'") && endQuote === quote) {
     const inner = value.slice(1, -1);
-    return quote === '"' ? inner.replace(/\\([nrt"\\])/g, (_, ch: string) => ESCAPES[ch] ?? ch) : inner;
+    return quote === '"'
+      ? inner.replace(/\\([nrt"\\])/g, (_, ch: string) => ESCAPES[ch] ?? ch)
+      : inner;
   }
 
   if (quote === '"' || quote === "'" || endQuote === '"' || endQuote === "'") {
@@ -230,9 +254,17 @@ function collectSecretRefs(env: Env): SecretRef[] {
 
   for (const [envKey, value] of Object.entries(env)) {
     if (value.startsWith("bws?:")) {
-      refs.push({ envKey, secretKey: value.slice("bws?:".length), optional: true });
+      refs.push({
+        envKey,
+        secretKey: value.slice("bws?:".length),
+        optional: true,
+      });
     } else if (value.startsWith("bws:")) {
-      refs.push({ envKey, secretKey: value.slice("bws:".length), optional: false });
+      refs.push({
+        envKey,
+        secretKey: value.slice("bws:".length),
+        optional: false,
+      });
     }
   }
 
@@ -248,17 +280,27 @@ function collectSecretRefs(env: Env): SecretRef[] {
 function bwsBinary(): string {
   const bin = Bun.which("bws");
   if (!bin) {
-    fail("bws not found on PATH; install Bitwarden Secrets Manager CLI as a user binary, e.g. ~/.local/bin/bws");
+    fail(
+      "bws not found on PATH; install Bitwarden Secrets Manager CLI as a user binary, e.g. ~/.local/bin/bws",
+    );
   }
   return bin;
 }
 
-function listProjectSecrets(bws: string, projectId: string, env: Env): BwsSecret[] {
+function listProjectSecrets(
+  bws: string,
+  projectId: string,
+  env: Env,
+): BwsSecret[] {
   try {
-    const raw = execFileSync(bws, ["secret", "list", projectId, "--output", "json"], {
-      env,
-      stdio: ["ignore", "pipe", "inherit"],
-    });
+    const raw = execFileSync(
+      bws,
+      ["secret", "list", projectId, "--output", "json"],
+      {
+        env,
+        stdio: ["ignore", "pipe", "inherit"],
+      },
+    );
 
     const parsed = JSON.parse(raw.toString()) as unknown;
     if (!Array.isArray(parsed)) {
@@ -287,7 +329,11 @@ function isBwsSecret(value: unknown): value is BwsSecret {
   );
 }
 
-function resolveSecretRefs(refs: SecretRef[], secrets: BwsSecret[], env: Env): void {
+function resolveSecretRefs(
+  refs: SecretRef[],
+  secrets: BwsSecret[],
+  env: Env,
+): void {
   const byKey = new Map<string, BwsSecret[]>();
 
   for (const secret of secrets) {
@@ -300,7 +346,9 @@ function resolveSecretRefs(refs: SecretRef[], secrets: BwsSecret[], env: Env): v
     const matches = byKey.get(ref.secretKey) ?? [];
 
     if (matches.length > 1) {
-      fail(`${ref.envKey}: multiple Bitwarden secrets found with key ${ref.secretKey}`);
+      fail(
+        `${ref.envKey}: multiple Bitwarden secrets found with key ${ref.secretKey}`,
+      );
     }
 
     if (matches.length === 0) {
@@ -309,7 +357,9 @@ function resolveSecretRefs(refs: SecretRef[], secrets: BwsSecret[], env: Env): v
         continue;
       }
 
-      fail(`${ref.envKey}: Bitwarden secret key ${ref.secretKey} not found in project`);
+      fail(
+        `${ref.envKey}: Bitwarden secret key ${ref.secretKey} not found in project`,
+      );
     }
 
     const firstMatch = matches[0];
