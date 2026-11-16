@@ -1,5 +1,9 @@
 #!/usr/bin/env sh
+# Pre-commit gate for the dotfiles repository.
+# Wire it up with: git config core.hooksPath git/hooks
 set -eu
 
 repo_root="$(git rev-parse --show-toplevel)"
-exec "$repo_root/scripts/check-dotfiles-safety" --quiet
+
+"$repo_root/scripts/check-dotfiles-lint" --quiet
+"$repo_root/scripts/check-dotfiles-safety" --quiet

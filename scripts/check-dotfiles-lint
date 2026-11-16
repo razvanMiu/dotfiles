@@ -1,0 +1,242 @@
+#!/usr/bin/env bash
+# Syntax gate for the dotfiles repository.
+#
+# Checks the tracked files an editor or a typo can silently corrupt:
+#   - zsh config and zsh scripts        -> zsh -n
+#   - shell scripts and sh scripts      -> bash -n / sh -n
+#   - JSON and JSONC configs            -> parse with comments and trailing commas allowed
+#   - tmux configuration                -> tmux sources it in a throwaway server
+#   - TypeScript in scripts/            -> bun build --no-bundle (syntax + types resolution)
+#
+# Usage: scripts/check-dotfiles-lint [--quiet]
+# Exit:  0 clean, 1 findings, 2 tooling unavailable (reported, never silently skipped)
+
+set -uo pipefail
+
+quiet=0
+[ "${1:-}" = "--quiet" ] && quiet=1
+
+repo_root=$(cd "$(dirname "$0")/.." && pwd) || exit 2
+cd "$repo_root" || exit 2
+
+failures=0
+checked=0
+skipped=()
+
+fail() {
+	printf '  FAIL  %s\n' "$1"
+	printf '        %s\n' "$2"
+	failures=$((failures + 1))
+}
+
+have() { command -v "$1" >/dev/null 2>&1; }
+
+# Only tracked files are checked: the repository is a default-deny allowlist,
+# so anything untracked is either generated or deliberately ignored.
+tracked() { git ls-files "$@"; }
+
+# --- shell scripts -----------------------------------------------------------
+if have zsh && have bash; then
+	for f in $(tracked); do
+		[ -f "$f" ] || continue
+		case "$f" in
+		*.zsh | */zshrc | zsh/zshrc)
+			checked=$((checked + 1))
+			if ! err=$(zsh -n "$f" 2>&1); then fail "$f" "${err//$'\n'/ }"; fi
+			;;
+		esac
+	done
+else
+	skipped+=("shell scripts (zsh/bash not found)")
+fi
+
+if have bash; then
+	while IFS= read -r f; do
+		[ -f "$f" ] || continue
+		shebang=$(head -1 "$f" 2>/dev/null || true)
+		interp=""
+		case "$shebang" in
+		*"bash"*) interp=bash ;;
+		*"sh") interp=sh ;;
+		esac
+		# A file with no recognised shebang still claims to be a script by extension.
+		if [ -z "$interp" ]; then
+			case "$f" in *.sh) interp=bash ;; esac
+		fi
+		if [ -n "$interp" ]; then
+			checked=$((checked + 1))
+			err=$(bash -n "$f" 2>&1) || fail "$f" "${err//$'\n'/ }"
+		fi
+	done < <(tracked)
+else
+	skipped+=("shell scripts (bash not found)")
+fi
+
+# --- JSON / JSONC ------------------------------------------------------------
+if have python3; then
+	while IFS= read -r f; do
+		[ -f "$f" ] || continue
+		checked=$((checked + 1))
+		err=$(python3 - "$f" <<'PY' 2>&1
+import json, re, sys, pathlib
+p = pathlib.Path(sys.argv[1])
+raw = p.read_text()
+stripped = re.sub(r'^\s*//.*$', '', raw, flags=re.M)
+stripped = re.sub(r'/\*.*?\*/', '', stripped, flags=re.S)
+stripped = re.sub(r',(\s*[}\]])', r'\1', stripped)
+try:
+    json.loads(stripped)
+except Exception as exc:
+    print(exc)
+    sys.exit(1)
+PY
+		) || fail "$f" "${err//$'\n'/ }"
+	done < <(tracked '*.json')
+else
+	skipped+=("JSON/JSONC (python3 not found)")
+fi
+
+# --- trailing newline ---------------------------------------------------------
+# Formatting hygiene is a gate, not a prose rule: every tracked text file must end
+# with a newline. Binary and empty files are skipped.
+if have python3; then
+	while IFS= read -r f; do
+		[ -f "$f" ] || continue
+		case "$f" in
+		*.md | *.json | *.yaml | *.yml | *.ts | *.zsh | *.sh | *.conf | *.toml | *.lua | *.c | *.h | *.go | *.txt | *.rasi | *.gitignore | */zshrc | */xinitrc)
+			checked=$((checked + 1))
+			err=$(python3 - "$f" <<'PY' 2>&1
+import sys, pathlib
+f = pathlib.Path(sys.argv[1])
+data = f.read_bytes()
+if data and not data.endswith(b"\n"):
+    print("missing trailing newline")
+    sys.exit(1)
+PY
+			) || fail "$f" "$err"
+			;;
+		esac
+	done < <(tracked)
+else
+	skipped+=("trailing newlines (python3 not found)")
+fi
+
+# --- skill frontmatter -------------------------------------------------------
+# A malformed SKILL.md frontmatter removes the skill from the agent's skill list
+# silently: an unquoted colon in a description once made a whole skill disappear.
+if have python3; then
+	checked=$((checked + 1))
+	out=$(python3 - <<'PY' 2>&1
+import pathlib
+import re
+import sys
+
+root = pathlib.Path("agents/skills")
+if not root.is_dir():
+    sys.exit(0)
+
+problems = []
+seen = {}
+
+for skill in sorted(root.iterdir()):
+    if not skill.is_dir():
+        continue
+    md = skill / "SKILL.md"
+    if not md.is_file():
+        problems.append(f"{skill.name}: no SKILL.md")
+        continue
+
+    text = md.read_text()
+    if not text.startswith("---\n"):
+        problems.append(f"{md}: missing frontmatter block")
+        continue
+    end = text.find("\n---\n", 4)
+    if end < 0:
+        problems.append(f"{md}: unterminated frontmatter")
+        continue
+
+    fields = {}
+    for line in text[4:end].splitlines():
+        if not line.strip() or line.lstrip().startswith("#"):
+            continue
+        if line.startswith((" ", "\t")):
+            continue  # continuation or nested value
+        m = re.match(r"^([A-Za-z0-9_-]+):\s*(.*)$", line)
+        if not m:
+            problems.append(f"{md}: not a 'key: value' line: {line[:40]}")
+            continue
+        key, value = m.group(1), m.group(2)
+        if key == "description" and not value.startswith(("'", '"')) and ": " in value:
+            problems.append(
+                f"{md}: unquoted colon in description removes the skill from the list; wrap it in quotes"
+            )
+        fields[key] = value
+
+    name = fields.get("name", "").strip().strip("'\"")
+    if not name:
+        problems.append(f"{md}: missing name")
+    elif name != skill.name:
+        problems.append(f"{md}: name '{name}' does not match directory '{skill.name}'")
+
+    if not fields.get("description", "").strip():
+        problems.append(f"{md}: missing or empty description")
+
+    if name:
+        seen.setdefault(name, []).append(md)
+
+for name, paths in seen.items():
+    if len(paths) > 1:
+        problems.append(f"duplicate skill name '{name}': {', '.join(str(p) for p in paths)}")
+
+if problems:
+    print("\n".join(problems))
+    sys.exit(1)
+PY
+	)
+	if [ -n "$out" ]; then
+		while IFS= read -r line; do
+			[ -n "$line" ] && fail "agents/skills" "$line"
+		done <<<"$out"
+	fi
+else
+	skipped+=("skill frontmatter (python3 not found)")
+fi
+
+# --- tmux --------------------------------------------------------------------
+if have tmux; then
+	if [ -f tmux/tmux.conf ]; then
+		checked=$((checked + 1))
+		sock="dotfiles-lint-$$"
+		if ! err=$(tmux -L "$sock" -f tmux/tmux.conf new-session -d 2>&1); then
+			fail "tmux/tmux.conf" "${err//$'\n'/ }"
+		fi
+		tmux -L "$sock" kill-server >/dev/null 2>&1 || true
+	fi
+else
+	skipped+=("tmux/tmux.conf (tmux not found)")
+fi
+
+# --- TypeScript --------------------------------------------------------------
+if have bun; then
+	while IFS= read -r f; do
+		[ -f "$f" ] || continue
+		checked=$((checked + 1))
+		err=$(bun build --no-bundle --target=bun "$f" --outdir /tmp/dotfiles-lint-$$ 2>&1) ||
+			fail "$f" "${err//$'\n'/ }"
+	done < <(tracked 'scripts/*.ts')
+	rm -rf /tmp/dotfiles-lint-$$
+else
+	skipped+=("TypeScript in scripts/ (bun not found)")
+fi
+
+# --- report ------------------------------------------------------------------
+if [ "$failures" -gt 0 ]; then
+	printf 'check-dotfiles-lint: %d finding(s) across %d checked file(s)\n' "$failures" "$checked"
+	exit 1
+fi
+
+if [ "$quiet" -eq 0 ]; then
+	printf 'check-dotfiles-lint: clean (%d file(s) checked)\n' "$checked"
+	for s in "${skipped[@]:-}"; do [ -n "$s" ] && printf '  skipped: %s\n' "$s"; done
+fi
+exit 0
