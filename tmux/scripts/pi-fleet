@@ -1,0 +1,824 @@
+#!/usr/bin/env bash
+# Fast, on-demand Pi Fleet Controller popup for tmux.
+# Provides real-time visibility and control across all active Pi agents & subagents,
+# organized hierarchically with clean UX, status icons, zero-flicker preview zoom, and split pane tailing.
+
+set -euo pipefail
+
+FLEET_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/pi/fleet"
+SCRIPT_PATH="$(realpath "$0")"
+
+mkdir -p "$FLEET_DIR"
+
+# 1. Preview helper: Invoked by fzf preview option with fleet JSON or subagent status JSON
+if [ "${1:-}" = "--preview" ]; then
+  file="${2:-}"
+  tmux_w="${3:-160}"
+  [ -f "$file" ] || { echo "Entry not found: $file"; exit 0; }
+
+  python3 - "$file" "$tmux_w" <<'EOF'
+import sys, json, os, time, glob, subprocess, re
+
+path = sys.argv[1]
+try:
+    tmux_w = int(sys.argv[2])
+except:
+    tmux_w = 160
+
+popup_w = int(tmux_w * 0.90)
+inner_w = popup_w - 2
+preview_w = int(inner_w * 0.50)
+div_len = max(35, preview_w - 10)
+
+try:
+    with open(path, 'r') as fp:
+        data = json.load(fp)
+except Exception as e:
+    print(f'Error reading entry: {e}')
+    sys.exit(0)
+
+C_RESET   = '\033[0m'
+C_BOLD    = '\033[1m'
+C_BLUE    = '\033[1;34m'
+C_CYAN    = '\033[1;36m'
+C_GREEN   = '\033[1;32m'
+C_ORANGE  = '\033[1;33m'
+C_RED     = '\033[1;31m'
+C_DIM     = '\033[2m'
+C_MAGENTA = '\033[1;35m'
+
+is_subagent = ('steps' in data and len(data.get('steps', [])) > 0) or ('lifecycleArtifactVersion' in data)
+
+def clean_task_text(task, agent):
+    if not task: return 'Subagent task'
+    task = re.sub(rf'^{agent}\s*[:\-]\s*', '', task, flags=re.I)
+    task = re.sub(r'^\[Read from:[^\]]+\]\s*', '', task)
+    task = re.sub(r'^Task:\s*', '', task, flags=re.I)
+    lines = [l.strip() for l in task.split('\n') if l.strip()]
+    if lines: task = lines[0]
+    return re.sub(r'\.{3,}$', '', task).strip()
+
+def resolve_subagent_task(step, st):
+    raw = step.get('sessionName') or step.get('description', '')
+    if 'Read from:' in raw or raw.endswith('~/') or raw.endswith('....') or raw.endswith('...'):
+        rid = st.get('runId', '')
+        matches = glob.glob(os.path.expanduser(f'~/.local/state/pi/sessions/subagent-artifacts/{rid}*transcript.jsonl'))
+        if matches:
+            try:
+                with open(matches[0], 'r', errors='ignore') as fp:
+                    for l in fp:
+                        d = json.loads(l)
+                        txt = d.get('text') or ''
+                        if not txt and isinstance(d.get('message', {}).get('content'), list):
+                            for it in d['message']['content']:
+                                if isinstance(it, dict) and it.get('type') == 'text': txt += it.get('text', '')
+                        if 'Task: [Read from:' in txt:
+                            parts = txt.split('\n\n')
+                            if len(parts) > 1 and parts[1].strip():
+                                return parts[1].strip().split('\n')[0][:80]
+            except Exception: pass
+    return clean_task_text(raw, step.get('agent', 'worker'))
+
+def format_time_ago(ts):
+    sec = max(0, int((time.time() * 1000 - ts) / 1000))
+    if sec < 60: return f'{sec}s ago'
+    if sec < 3600: return f'{sec // 60}m ago'
+    return f'{sec // 3600}h ago'
+
+# -------------------------------------------------------------
+# CASE A: SUBAGENT PREVIEW
+# -------------------------------------------------------------
+if is_subagent:
+    step = data.get('steps', [{}])[0]
+    agent = step.get('agent', 'worker')
+    sname = resolve_subagent_task(step, data)
+    s_state = step.get('status', data.get('state', 'running'))
+    model = step.get('model', 'default')
+    recent_tools = step.get('recentTools', [])
+    last_tool = recent_tools[-1].get('tool') if recent_tools else ''
+    last_args = recent_tools[-1].get('args', '') if recent_tools else ''
+    turn_count = step.get('turnCount', 0)
+    s_pid = step.get('pid') or data.get('pid', 'N/A')
+
+    if s_state in ('running', 'active_long_running'):
+        s_badge = f'{C_CYAN}󱚣 WORKING (Turn {turn_count}){C_RESET}'
+    elif s_state in ('completed', 'complete'):
+        s_badge = f'{C_GREEN}✓ COMPLETED (Turn {turn_count}){C_RESET}'
+    elif s_state == 'failed':
+        s_badge = f'{C_RED}✗ FAILED{C_RESET}'
+    else:
+        s_badge = f'{C_DIM}{s_state.upper()}{C_RESET}'
+
+    elapsed_sec = int(time.time() - (step.get('startedAt', data.get('startedAt', time.time() * 1000)) / 1000))
+    elapsed_str = f'{elapsed_sec // 60}m {elapsed_sec % 60}s'
+
+    p_sess = data.get('sessionId', '')
+    p_name = os.path.basename(p_sess).replace('.jsonl', '') if p_sess else 'Unknown'
+
+    print(f'{C_BOLD}Subagent:{C_RESET}    {C_MAGENTA}[{agent.upper()}]{C_RESET} (Delegated Child)')
+    print(f'{C_BOLD}Task:{C_RESET}        {sname}')
+    print(f'{C_BOLD}Status:{C_RESET}      {s_badge}')
+    if last_tool:
+        args_str = f' ({last_args[:45]})' if last_args else ''
+        print(f'{C_BOLD}Active Tool:{C_RESET} {C_ORANGE}{last_tool}{args_str}{C_RESET}')
+    print(f'{C_BOLD}Parent:{C_RESET}      {p_name}')
+    print(f'{C_BOLD}Model:{C_RESET}       {model}')
+    print(f'{C_BOLD}PID:{C_RESET}         {s_pid}  {C_DIM}(active for {elapsed_str}){C_RESET}')
+
+    tokens = step.get('tokens') or data.get('totalTokens') or {}
+    if tokens:
+        print(f'{C_BOLD}Tokens:{C_RESET}      {C_DIM}in: {tokens.get("input", 0):,} | out: {tokens.get("output", 0):,} | total: {tokens.get("total", 0):,}{C_RESET}')
+
+    print('\n' + C_CYAN + '─' * div_len + C_RESET)
+    print(f'{C_BOLD}Execution Steps & Tool History:{C_RESET}')
+
+    transcript_path = step.get('transcriptPath')
+    output_file = data.get('outputFile')
+    rid = data.get('runId', '')
+    if not transcript_path and rid:
+        matches = glob.glob(os.path.expanduser(f'~/.local/state/pi/sessions/subagent-artifacts/{rid}*transcript.jsonl'))
+        if matches: transcript_path = matches[0]
+
+    shown = False
+
+    if transcript_path and os.path.exists(transcript_path):
+        try:
+            msgs = []
+            with open(transcript_path, 'r', errors='ignore') as tfp:
+                for l in tfp:
+                    try:
+                        d = json.loads(l)
+                        t = d.get('type')
+                        if t == 'message':
+                            m = d.get('message', {})
+                            r = m.get('role', '')
+                            if r not in ('user', 'assistant'): continue
+                            c = m.get('content', '')
+                            txt = ''
+                            if isinstance(c, str): txt = c
+                            elif isinstance(c, list):
+                                for it in c:
+                                    if isinstance(it, dict) and it.get('type') == 'text': txt += it.get('text', '')
+                            lines = [ln.strip() for ln in txt.split('\n') if ln.strip() and not ln.startswith('```')]
+                            if lines: msgs.append((r, lines[0]))
+                        elif t in ('tool_execution_start', 'tool_call'):
+                            tool_name = d.get('toolName') or d.get('tool')
+                            t_args = str(d.get('args', ''))[:60]
+                            msgs.append(('tool', f'{tool_name}: {t_args}'))
+                    except Exception:
+                        pass
+            if msgs:
+                for role, text in msgs[-12:]:
+                    color = C_GREEN if role == 'user' else (C_ORANGE if role == 'tool' else C_MAGENTA)
+                    prefix = f'{color}[{role.upper()}]{C_RESET}'
+                    snippet = text[:90] + ('...' if len(text) > 90 else '')
+                    print(f'  {prefix} {snippet}')
+                shown = True
+        except Exception:
+            pass
+
+    if not shown and recent_tools:
+        for rt in recent_tools[-8:]:
+            tname = rt.get('tool')
+            targs = str(rt.get('args', ''))[:70]
+            print(f'  {C_ORANGE}[TOOL: {tname}]{C_RESET} {targs}')
+        shown = True
+
+    if not shown and output_file and os.path.exists(output_file):
+        try:
+            with open(output_file, 'r', errors='ignore') as ofp:
+                olines = [ol.strip() for ol in ofp if ol.strip()]
+            for ol in olines[-8:]:
+                print(f'  {C_DIM}{ol[:90]}{C_RESET}')
+            shown = True
+        except Exception:
+            pass
+
+    if not shown:
+        print(f'  {C_DIM}No activity recorded yet.{C_RESET}')
+    sys.exit(0)
+
+# -------------------------------------------------------------
+# CASE B: ROOT SESSION PREVIEW
+# -------------------------------------------------------------
+state = data.get('state', 'idle')
+if state == 'working':
+    badge = f'{C_CYAN}󱚣 WORKING{C_RESET}'
+elif state == 'blocked':
+    badge = f'{C_RED}⏸ BLOCKED (Awaiting Input/Approval){C_RESET}'
+elif state == 'done':
+    badge = f'{C_GREEN}✓ DONE{C_RESET}'
+else:
+    badge = f'{C_DIM}💤 IDLE{C_RESET}'
+
+elapsed_sec = int(time.time() - (data.get('startedAt', time.time() * 1000) / 1000))
+elapsed_str = f'{elapsed_sec // 60}m {elapsed_sec % 60}s'
+
+tmux = data.get('tmux') or {}
+if not tmux.get('paneId') and data.get('pid'):
+    try:
+        pid = data.get('pid')
+        ppid_out = subprocess.check_output(['ps', '-o', 'ppid=', '-p', str(pid)], text=True, stderr=subprocess.DEVNULL).strip()
+        panes = subprocess.check_output(['tmux', 'list-panes', '-a', '-F', '#{session_name}:::#{window_index}:::#{window_name}:::#{pane_id}:::#{pane_pid}'], text=True, stderr=subprocess.DEVNULL).strip().split('\n')
+        for l in panes:
+            s, w, wn, p, p_pid = l.split(':::')
+            if p_pid in (str(pid), ppid_out):
+                tmux = {'session': s, 'windowIndex': w, 'windowName': wn, 'paneId': p}
+                break
+    except Exception:
+        pass
+
+if tmux and tmux.get('paneId'):
+    tmux_str = f"session '{tmux.get('session')}', win {tmux.get('windowIndex')} ({tmux.get('windowName')}), pane {tmux.get('paneId')}"
+else:
+    tmux_str = f"{C_ORANGE}Outside tmux or resolving pane...{C_RESET}"
+
+print(f'{C_BOLD}Project:{C_RESET}     {C_BLUE}{data.get("project", "default")}{C_RESET}')
+print(f'{C_BOLD}Session:{C_RESET}     {data.get("name", "unnamed")}')
+print(f'{C_BOLD}Status:{C_RESET}      {badge}')
+if data.get('stateDetail'):
+    print(f'{C_BOLD}Detail:{C_RESET}      {C_ORANGE}{data.get("stateDetail")}{C_RESET}')
+print(f'{C_BOLD}Tmux Target:{C_RESET} {tmux_str}')
+print(f'{C_BOLD}PID:{C_RESET}         {data.get("pid")}  {C_DIM}(active for {elapsed_str}){C_RESET}')
+print(f'{C_BOLD}Directory:{C_RESET}   {data.get("cwd", "")}')
+
+# Discover subagents for this root session (focus on active or latest workflow)
+sfile = data.get('sessionFile')
+pid = data.get('pid')
+subagents = []
+sub_heading = 'No delegated subagents active.'
+
+tmp = os.environ.get('TMPDIR', '/tmp')
+active_dirs = glob.glob(os.path.join(tmp, 'pi-subagents-*', 'async-subagent-runs'))
+if not active_dirs:
+    active_dirs = glob.glob('/var/folders/*/*/*/pi-subagents-*/async-subagent-runs')
+
+if active_dirs:
+    root_async = active_dirs[0]
+    marker_dir = os.path.join(root_async, '.active-runs')
+    active_markers = set()
+    if os.path.isdir(marker_dir):
+        try: active_markers = set(os.listdir(marker_dir))
+        except Exception: pass
+
+    matched_runs = []
+    workflows = []
+
+    try:
+        for item in os.listdir(root_async):
+            if item.startswith('.') or item == 'tool-calls': continue
+            st_path = os.path.join(root_async, item, 'status.json')
+            if os.path.exists(st_path):
+                try:
+                    with open(st_path, 'r') as sfp: st = json.load(sfp)
+                    p_sess = st.get('sessionId')
+                    p_pid = st.get('completionOwnerProcess', {}).get('pid')
+                    if (sfile and p_sess == sfile) or (pid and p_pid == pid):
+                        if st.get('mode') == 'workflow':
+                            workflows.append(st)
+                        else:
+                            st['_is_active'] = (item in active_markers) or (st.get('state') in ('running', 'queued'))
+                            matched_runs.append(st)
+                except Exception: pass
+    except Exception: pass
+
+    # Show active runs first
+    active_matched = [r for r in matched_runs if r.get('_is_active')]
+    if active_matched:
+        subagents = active_matched
+        sub_heading = f'{len(subagents)} active'
+    else:
+        # Show runs from latest workflow
+        workflows.sort(key=lambda w: -w.get('startedAt', 0))
+        latest_wf = workflows[0].get('runId') if workflows else None
+        if latest_wf:
+            subagents = [r for r in matched_runs if r.get('parentWorkflowRunId') == latest_wf]
+            sub_heading = f'{len(subagents)} in latest workflow (all completed)'
+        elif matched_runs:
+            matched_runs.sort(key=lambda r: -r.get('startedAt', 0))
+            subagents = matched_runs[:3]
+            sub_heading = f'{len(subagents)} recent'
+
+print('\n' + C_CYAN + '─' * div_len + C_RESET)
+print(f'{C_BOLD}Subagents:{C_RESET}   {sub_heading}')
+if subagents:
+    for i, s in enumerate(subagents[:6]):
+        is_last = (i == len(subagents[:6]) - 1)
+        branch = "└─ " if is_last else "├─ "
+        pipe   = "   " if is_last else "│  "
+
+        step = s.get('steps', [{}])[0]
+        s_role = step.get('agent', 'worker')
+        s_task = resolve_subagent_task(step, s)
+        s_state = step.get('status', s.get('state', 'running'))
+        r_tools = step.get('recentTools', [])
+        cur_tool = r_tools[-1].get('tool', '') if r_tools else ''
+        s_turns = step.get('turnCount', 0)
+        tool_str = f', tool: {cur_tool}' if cur_tool else ''
+        turn_str = f', turn {s_turns}' if s_turns else ''
+        s_time = format_time_ago(step.get('startedAt', s.get('startedAt', time.time() * 1000)))
+
+        max_task_chars = max(30, preview_w - 24)
+        if len(s_task) > max_task_chars:
+            s_task_display = s_task[:max_task_chars-1] + '…'
+        else:
+            s_task_display = s_task
+
+        # Line 1: Header line with branch (clamped so it never wraps)
+        print(f'  {C_MAGENTA}{branch}[{s_role}]{C_RESET} {s_task_display}')
+        # Line 2: Subtitle line with CONTINUOUS vertical pipe
+        print(f'  {C_DIM}{pipe}↳ ({s_state}{tool_str}{turn_str}, {s_time}){C_RESET}')
+else:
+    print(f'  {C_DIM}No delegated subagents active.{C_RESET}')
+
+# Session Transcript Tail - clean conversational turns
+if sfile and os.path.exists(sfile):
+    print('\n' + C_CYAN + '─' * div_len + C_RESET)
+    print(f'{C_BOLD}Recent Conversation & Intent:{C_RESET}')
+    conversation = []
+    try:
+        with open(sfile, 'r', errors='ignore') as fp:
+            for line in fp:
+                try:
+                    d = json.loads(line)
+                    t = d.get('type')
+                    if t == 'message':
+                        m = d.get('message', {})
+                        role = m.get('role', '')
+                        if role not in ('user', 'assistant'): continue
+                        c = m.get('content', '')
+                        txt = ''
+                        if isinstance(c, str): txt = c
+                        elif isinstance(c, list):
+                            for it in c:
+                                if isinstance(it, dict) and it.get('type') == 'text':
+                                    txt += it.get('text', '')
+                        if '<pi_subagents_notice' in txt: continue
+                        lines = [l.strip() for l in txt.split('\n') if l.strip() and not l.startswith('```') and not l.startswith('{')]
+                        if lines:
+                            conversation.append((role, lines[0]))
+                except Exception:
+                    pass
+        for role, text in conversation[-6:]:
+            color = C_GREEN if role == 'user' else C_MAGENTA
+            snippet = text[:90] + ('...' if len(text) > 90 else '')
+            print(f'  {color}[{role.upper()}]{C_RESET} {snippet}')
+    except Exception as e:
+        print(f'  {C_DIM}(Unable to read transcript: {e}){C_RESET}')
+EOF
+  exit 0
+fi
+
+# 2. Live Tail Viewer: In-popup or pane live streaming of session/subagent events
+if [ "${1:-}" = "--tail" ]; then
+  file="${2:-}"
+  [ -f "$file" ] || { echo "Log file not found: $file"; exit 0; }
+
+  stream_tmp="/tmp/pi-stream-$$.log"
+  rm -f "$stream_tmp"
+
+  python3 - "$file" "$stream_tmp" <<'EOF'
+import sys, os, json
+
+sfile = sys.argv[1]
+outfile = sys.argv[2]
+
+C_RESET  = '\033[0m'
+C_BOLD   = '\033[1m'
+C_BLUE   = '\033[1;34m'
+C_CYAN   = '\033[1;36m'
+C_GREEN  = '\033[1;32m'
+C_ORANGE = '\033[1;33m'
+C_MAGENTA= '\033[1;35m'
+C_DIM    = '\033[2m'
+
+def format_item(d):
+    t = d.get('type')
+    if t == 'message':
+        m = d.get('message', {})
+        role = m.get('role', '')
+        c = m.get('content', '')
+        text = ''
+        if isinstance(c, str): text = c
+        elif isinstance(c, list):
+            for it in c:
+                if isinstance(it, dict) and it.get('type') == 'text': text += it.get('text', '')
+        if text:
+            color = C_GREEN if role == 'user' else C_MAGENTA
+            lines = text.strip().split('\n')
+            preview = lines[0][:100] + ('...' if len(lines) > 1 or len(lines[0]) > 100 else '')
+            return f'{color}[{role.upper()}]{C_RESET} {preview}'
+    elif t == 'tool_execution_start':
+        tool = d.get('toolName', '')
+        args = str(d.get('args', ''))[:70]
+        return f'{C_ORANGE}[TOOL:{tool}]{C_RESET} {C_DIM}{args}{C_RESET}'
+    elif t == 'tool_result':
+        tool = d.get('toolName', '')
+        return f'{C_CYAN}[RESULT:{tool}]{C_RESET}'
+    return None
+
+with open(sfile, 'r', errors='ignore') as fp, open(outfile, 'w') as out:
+    out.write(f'{C_BLUE}═════════════════════════════════════════════════════════════════{C_RESET}\n')
+    out.write(f'{C_BOLD} Live Stream: {C_RESET}{C_CYAN}{os.path.basename(sfile)}{C_RESET}\n')
+    out.write(f'{C_DIM} Scroll: mouse wheel / trackpad / ↑↓ / PageUp / PageDown  ·  Exit: q{C_RESET}\n')
+    out.write(f'{C_BLUE}═════════════════════════════════════════════════════════════════{C_RESET}\n\n')
+
+    is_jsonl = sfile.endswith('.jsonl')
+    for line in fp:
+        if is_jsonl:
+            try:
+                msg = format_item(json.loads(line))
+                if msg: out.write(msg + '\n')
+            except Exception: pass
+        else:
+            out.write(line)
+    out.write(f'\n{C_DIM}── Live Events ──{C_RESET}\n')
+EOF
+
+  python3 - "$file" "$stream_tmp" <<'EOF' &
+import sys, os, time, json
+
+sfile = sys.argv[1]
+outfile = sys.argv[2]
+
+C_RESET  = '\033[0m'
+C_GREEN  = '\033[1;32m'
+C_ORANGE = '\033[1;33m'
+C_MAGENTA= '\033[1;35m'
+C_CYAN   = '\033[1;36m'
+C_DIM    = '\033[2m'
+
+def format_item(d):
+    t = d.get('type')
+    if t == 'message':
+        m = d.get('message', {})
+        role = m.get('role', '')
+        c = m.get('content', '')
+        text = ''
+        if isinstance(c, str): text = c
+        elif isinstance(c, list):
+            for it in c:
+                if isinstance(it, dict) and it.get('type') == 'text': text += it.get('text', '')
+        if text:
+            color = C_GREEN if role == 'user' else C_MAGENTA
+            lines = text.strip().split('\n')
+            preview = lines[0][:100] + ('...' if len(lines) > 1 or len(lines[0]) > 100 else '')
+            return f'{color}[{role.upper()}]{C_RESET} {preview}'
+    elif t == 'tool_execution_start':
+        tool = d.get('toolName', '')
+        args = str(d.get('args', ''))[:70]
+        return f'{C_ORANGE}[TOOL:{tool}]{C_RESET} {C_DIM}{args}{C_RESET}'
+    elif t == 'tool_result':
+        tool = d.get('toolName', '')
+        return f'{C_CYAN}[RESULT:{tool}]{C_RESET}'
+    return None
+
+with open(sfile, 'r', errors='ignore') as fp:
+    fp.seek(0, 2)
+    is_jsonl = sfile.endswith('.jsonl')
+    while True:
+        line = fp.readline()
+        if not line:
+            time.sleep(0.3)
+            continue
+        with open(outfile, 'a') as out:
+            if is_jsonl:
+                try:
+                    msg = format_item(json.loads(line))
+                    if msg: out.write(msg + '\n')
+                except Exception: pass
+            else:
+                out.write(line)
+EOF
+  WATCH_PID=$!
+  trap 'kill -9 "$WATCH_PID" 2>/dev/null || true; rm -f "$stream_tmp"' EXIT
+
+  less -R --mouse --wheel-lines=3 +G "$stream_tmp" || true
+  kill -9 "$WATCH_PID" 2>/dev/null || true
+  rm -f "$stream_tmp"
+  exit 0
+fi
+
+# 3. Main Fleet Selector
+while true; do
+  tmux_w=$(tmux display-message -p "#{client_width}" 2>/dev/null || echo 160)
+
+  # Extract active fleet entries fast & build hierarchical tree of agents and subagents
+  list_output=$(python3 - "$FLEET_DIR" "$tmux_w" <<'EOF'
+import glob, json, os, sys, time, re
+
+fleet_dir = sys.argv[1]
+try:
+    tmux_w = int(sys.argv[2])
+except:
+    tmux_w = 160
+
+popup_w = int(tmux_w * 0.90)
+list_w = int(popup_w * 0.50)
+
+# Full-width budget: project (20) + status icon (4) + safety margin (10)
+p_w = 20
+task_w = max(18, list_w - p_w - 10)
+
+def clean_task_text(task, agent):
+    if not task: return 'Subagent task'
+    task = re.sub(rf'^{agent}\s*[:\-]\s*', '', task, flags=re.I)
+    task = re.sub(r'^\[Read from:[^\]]+\]\s*', '', task)
+    task = re.sub(r'^Task:\s*', '', task, flags=re.I)
+    lines = [l.strip() for l in task.split('\n') if l.strip()]
+    if lines: task = lines[0]
+    return re.sub(r'\.{3,}$', '', task).strip()
+
+def resolve_subagent_task(step, st):
+    raw = step.get('sessionName') or step.get('description', '')
+    if 'Read from:' in raw or raw.endswith('~/') or raw.endswith('....') or raw.endswith('...'):
+        rid = st.get('runId', '')
+        matches = glob.glob(os.path.expanduser(f'~/.local/state/pi/sessions/subagent-artifacts/{rid}*transcript.jsonl'))
+        if matches:
+            try:
+                with open(matches[0], 'r', errors='ignore') as fp:
+                    for l in fp:
+                        d = json.loads(l)
+                        txt = d.get('text') or ''
+                        if not txt and isinstance(d.get('message', {}).get('content'), list):
+                            for it in d['message']['content']:
+                                if isinstance(it, dict) and it.get('type') == 'text': txt += it.get('text', '')
+                        if 'Task: [Read from:' in txt:
+                            parts = txt.split('\n\n')
+                            if len(parts) > 1 and parts[1].strip():
+                                return parts[1].strip().split('\n')[0][:80]
+            except Exception: pass
+    return clean_task_text(raw, step.get('agent', 'worker'))
+
+def resolve_subagent_log_path(st):
+    step = st.get('steps', [{}])[0]
+    tp = step.get('transcriptPath')
+    if tp and os.path.exists(tp): return tp
+    op = st.get('outputFile')
+    if op and os.path.exists(op): return op
+    rid = st.get('runId', '')
+    if rid:
+        matches = glob.glob(os.path.expanduser(f'~/.local/state/pi/sessions/subagent-artifacts/{rid}*transcript.jsonl'))
+        if matches and os.path.exists(matches[0]): return matches[0]
+        matches = glob.glob(os.path.expanduser(f'~/.local/state/pi/sessions/subagent-artifacts/{rid}*output.md'))
+        if matches and os.path.exists(matches[0]): return matches[0]
+    async_dir = st.get('sessionDir') or (st.get('_path') and os.path.dirname(st.get('_path')))
+    if async_dir:
+        for fname in ('output-0.log', 'runner.stdout.log', 'events.jsonl'):
+            cand = os.path.join(async_dir, fname)
+            if os.path.exists(cand) and os.path.getsize(cand) > 0: return cand
+    return ''
+
+files = glob.glob(os.path.join(fleet_dir, '*.json'))
+alive_entries = []
+
+for f in files:
+    try:
+        with open(f, 'r') as fp: data = json.load(fp)
+        pid = data.get('pid')
+        if not pid or data.get('name', '').startswith('subagent-'):
+            continue
+        try:
+            os.kill(pid, 0)
+        except OSError:
+            os.unlink(f); continue
+        alive_entries.append((f, data))
+    except Exception: pass
+
+if not alive_entries:
+    sys.exit(0)
+
+# Discover live and recent subagents from pi-subagents
+tmp = os.environ.get('TMPDIR', '/tmp')
+active_run_dirs = glob.glob(os.path.join(tmp, 'pi-subagents-*', 'async-subagent-runs'))
+if not active_run_dirs:
+    active_run_dirs = glob.glob('/var/folders/*/*/*/pi-subagents-*/async-subagent-runs')
+
+root_async = active_run_dirs[0] if active_run_dirs else None
+all_subagent_runs = {}
+active_markers = set()
+now = time.time() * 1000
+
+if root_async:
+    marker_dir = os.path.join(root_async, '.active-runs')
+    if os.path.isdir(marker_dir):
+        try: active_markers = set(os.listdir(marker_dir))
+        except Exception: pass
+
+    try:
+        for item in os.listdir(root_async):
+            if item.startswith('.') or item == 'tool-calls': continue
+            st_file = os.path.join(root_async, item, 'status.json')
+            if os.path.exists(st_file):
+                try:
+                    with open(st_file, 'r') as fp: st = json.load(fp)
+                    st['_path'] = st_file
+                    is_active = (item in active_markers) or (st.get('state') in ('running', 'queued'))
+                    is_recent = (now - st.get('startedAt', 0)) < 1800_000 # 30 mins
+                    st['_is_active'] = is_active
+                    st['_is_recent'] = is_recent
+                    if is_active or is_recent:
+                        all_subagent_runs[item] = st
+                except Exception: pass
+    except Exception: pass
+
+alive_entries.sort(key=lambda item: (item[1].get('project', '').lower(), -item[1].get('updatedAt', 0)))
+
+for f, d in alive_entries:
+    project = d.get('project', 'default')
+    name = d.get('name', 'unnamed')
+    state = d.get('state', 'idle')
+    sfile = d.get('sessionFile', '')
+    pid = d.get('pid')
+    t_tmux = d.get('tmux') or {}
+    t_session = t_tmux.get('session', '')
+    t_window = t_tmux.get('windowIndex', '')
+    pane_id = t_tmux.get('paneId', '')
+
+    session_runs = {}
+    for rid, st in all_subagent_runs.items():
+        p_sess = st.get('sessionId')
+        p_pid = st.get('completionOwnerProcess', {}).get('pid')
+        if (sfile and p_sess == sfile) or (pid and p_pid == pid):
+            session_runs[rid] = st
+
+    workflows = [st for st in session_runs.values() if st.get('mode') == 'workflow']
+    workflows.sort(key=lambda w: -w.get('startedAt', 0))
+    latest_wf_id = workflows[0].get('runId') if workflows else None
+
+    # Determine subagents to show in the tree
+    active_runs = [st for st in session_runs.values() if st.get('_is_active') and st.get('mode') != 'workflow']
+    if active_runs:
+        display_subagents = active_runs
+        badge_text = f'({len(active_runs)} active)'
+    elif latest_wf_id:
+        lw_runs = [st for st in session_runs.values() if st.get('parentWorkflowRunId') == latest_wf_id and st.get('mode') != 'workflow']
+        if lw_runs and (now - lw_runs[0].get('startedAt', 0) < 300_000): # 5 mins
+            display_subagents = lw_runs
+            badge_text = f'({len(lw_runs)})'
+        else:
+            display_subagents = []
+            badge_text = ''
+    else:
+        display_subagents = []
+        badge_text = ''
+
+    proj_badge = f'{project} {badge_text}'.strip()
+
+    # STATUS ICON ONLY
+    if state == 'working':
+        st_icon = '󱚣'
+    elif state == 'blocked':
+        st_icon = '⏸'
+    elif state == 'done':
+        st_icon = '✓'
+    else:
+        st_icon = '💤'
+
+    task_name = name[len(project)+1:] if name.startswith(project + '_') else name
+    task_str = f'{task_name[:task_w]:<{task_w}}'
+
+    # Output root session line: status icon only at the end
+    root_display = f'{proj_badge[:p_w]:<{p_w}}  {task_str}  {st_icon}'
+    print(f'{root_display}\t{f}\troot\t{t_session}\t{t_window}\t{pane_id}\t{sfile}\t{pid}')
+
+    # Recursive subagent tree
+    children_map = {}
+    top_level_runs = []
+    for item in display_subagents:
+        parent = item.get('parentWorkflowRunId')
+        if not parent or parent == latest_wf_id or parent not in [x.get('runId') for x in display_subagents]:
+            top_level_runs.append(item)
+        else:
+            children_map.setdefault(parent, []).append(item)
+
+    def render_subagent_tree(items, indent='  '):
+        for i, item in enumerate(items):
+            is_last = (i == len(items) - 1)
+            branch = '└─ ' if is_last else '├─ '
+            sub_indent = indent + ('   ' if is_last else '│  ')
+
+            step = item.get('steps', [{}])[0]
+            agent = step.get('agent', 'worker')
+            stask = resolve_subagent_task(step, item)
+            s_status = step.get('status', item.get('state', 'running'))
+            s_pid = step.get('pid') or item.get('pid') or pid
+
+            # STATUS ICON ONLY for subagents
+            if s_status in ('running', 'active_long_running'):
+                child_icon = '󱚣'
+            elif s_status in ('completed', 'complete'):
+                child_icon = '✓'
+            elif s_status == 'failed':
+                child_icon = '✗'
+            else:
+                child_icon = '•'
+
+            tree_col = f'{indent}{branch}[{agent}]'
+            col1 = f'{tree_col[:p_w]:<{p_w}}'
+            col2 = f'{stask[:task_w]:<{task_w}}'
+            child_display = f'{col1}  {col2}  {child_icon}'
+
+            log_path = resolve_subagent_log_path(item)
+            st_path = item.get('_path', '')
+
+            print(f'{child_display}\t{st_path}\tsubagent\t{t_session}\t{t_window}\t{pane_id}\t{log_path}\t{s_pid}')
+
+            sub_kids = children_map.get(item['runId'], [])
+            if sub_kids:
+                render_subagent_tree(sub_kids, sub_indent)
+
+    if top_level_runs:
+        render_subagent_tree(top_level_runs, '  ')
+EOF
+)
+
+  # Handle empty fleet
+  if [ -z "$list_output" ]; then
+    tmux display-message "Pi Fleet: No active agent sessions running."
+    exit 0
+  fi
+
+  popup_w=$((tmux_w * 90 / 100))
+  inner_w=$((popup_w - 2))
+  list_w=$((inner_w - (inner_w * 50 / 100)))
+  div_w=$((list_w - 4))
+  [ "$div_w" -lt 30 ] && div_w=30
+  divider=$(printf '─%.0s' $(seq 1 "$div_w"))
+
+  header=$' \033[1;36m↵ Enter\033[0m \033[2mjump to pane\033[0m   \033[1;35mC-t\033[0m \033[2mzoom preview (zero-flicker)\033[0m   \033[38;5;244mEsc\033[0m \033[2mclose\033[0m\n \033[1;35mC-w\033[0m \033[2mopen tail in split pane\033[0m   \033[1;35mC-k\033[0m \033[2minterrupt\033[0m\n\033[2m'"$divider"$'\033[0m'
+
+  # Interactive FZF Selector with zero-flicker preview zoom binding
+  selected=$(printf '%s\n' "$list_output" | fzf \
+    --ansi \
+    --delimiter='\t' \
+    --with-nth=1 \
+    --prompt='pi-fleet> ' \
+    --header="$header" \
+    --preview="$SCRIPT_PATH --preview {2} $tmux_w" \
+    --preview-window=right:50%:wrap \
+    --bind='ctrl-t:change-preview-window(right:75%:wrap|right:99%:wrap|right:50%:wrap)' \
+    --expect=ctrl-k,ctrl-w,ctrl-o \
+    --reverse \
+    --height=100%) || true
+
+  [ -z "$selected" ] && exit 0
+
+  key=$(printf '%s\n' "$selected" | sed -n '1p')
+  row=$(printf '%s\n' "$selected" | sed -n '2p')
+  [ -z "$row" ] && exit 0
+
+  target_file=$(printf '%s' "$row" | cut -f2)
+  kind=$(printf '%s' "$row" | cut -f3)
+  t_session=$(printf '%s' "$row" | cut -f4)
+  t_window=$(printf '%s' "$row" | cut -f5)
+  t_pane=$(printf '%s' "$row" | cut -f6)
+  t_file=$(printf '%s' "$row" | cut -f7)
+  t_pid=$(printf '%s' "$row" | cut -f8)
+
+  # Action: Ctrl-K (Interrupt agent or subagent)
+  if [ "$key" = "ctrl-k" ]; then
+    if [ "$kind" = "subagent" ]; then
+      printf "Interrupt subagent (PID %s)? [y/N]: " "$t_pid"
+      read -r confirm
+      if [ "$confirm" = "y" ] || [ "$confirm" = "Y" ]; then
+        kill -2 "$t_pid" 2>/dev/null || true
+        tmux display-message "Subagent interrupted."
+      fi
+    else
+      printf "Interrupt agent session (PID %s)? [y/N]: " "$t_pid"
+      read -r confirm
+      if [ "$confirm" = "y" ] || [ "$confirm" = "Y" ]; then
+        kill -2 "$t_pid" 2>/dev/null || true
+        [ -n "$t_pane" ] && tmux send-keys -t "$t_pane" C-c
+        tmux display-message "Agent session interrupted."
+      fi
+    fi
+    continue
+  fi
+
+  # Action: Ctrl-W / Ctrl-O (Open live tail in a side split pane in tmux)
+  if [ "$key" = "ctrl-w" ] || [ "$key" = "ctrl-o" ]; then
+    if [ -n "$t_file" ] && [ -f "$t_file" ]; then
+      tmux split-window -h -l 42% "$SCRIPT_PATH --tail '$t_file'"
+    else
+      tmux display-message "Log/transcript file not available for splitting."
+    fi
+    exit 0
+  fi
+
+  # Default (Enter): Switch directly to agent's tmux pane
+  if [ -n "$t_pane" ]; then
+    if [ -n "$t_session" ]; then
+      tmux switch-client -t "$t_session" 2>/dev/null || true
+    fi
+    if [ -n "$t_window" ]; then
+      tmux select-window -t "${t_session}:${t_window}" 2>/dev/null || tmux select-window -t "$t_window" 2>/dev/null || true
+    fi
+    tmux select-pane -t "$t_pane" 2>/dev/null || true
+    exit 0
+  else
+    tmux display-message "Selected agent is not running inside a tmux pane."
+    exit 0
+  fi
+done

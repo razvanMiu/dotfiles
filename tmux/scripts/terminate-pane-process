@@ -1,0 +1,46 @@
+#!/usr/bin/env bash
+# Terminate any running foreground process in a target tmux pane gracefully,
+# then ensure the shell readline prompt is clean.
+
+set -euo pipefail
+
+target_pane="${1:-}"
+
+if [ -z "$target_pane" ]; then
+  target_pane=$(tmux display-message -p "#{pane_id}" 2>/dev/null || true)
+fi
+
+[ -z "$target_pane" ] && exit 0
+
+# Query pane PID and current command
+pane_info=$(tmux display-message -p -t "$target_pane" "#{pane_pid}:::#{pane_current_command}" 2>/dev/null || true)
+[ -z "$pane_info" ] && exit 0
+
+shell_pid="${pane_info%%:::*}"
+current_cmd="${pane_info##*:::}"
+
+# If a process other than the login shell is running in the foreground, terminate it
+if [[ "$current_cmd" != "zsh" && "$current_cmd" != "bash" && "$current_cmd" != "sh" ]]; then
+  # 1. Send Ctrl-C to interrupt interactive processes (node, python, pi, dev servers, etc.)
+  tmux send-keys -t "$target_pane" C-c
+  sleep 0.1
+
+  # 2. Check if children of the shell still exist
+  if [ -n "$shell_pid" ]; then
+    child_pids=$(ps -ax -o pid=,ppid= | awk -v ppid="$shell_pid" '$2 == ppid {print $1}')
+    if [ -n "$child_pids" ]; then
+      for cpid in $child_pids; do
+        kill -INT "$cpid" 2>/dev/null || true
+      done
+      sleep 0.15
+      # If still running, send SIGTERM
+      for cpid in $child_pids; do
+        kill -TERM "$cpid" 2>/dev/null || true
+      done
+    fi
+  fi
+fi
+
+# Send C-c C-u to cancel any half-typed line or leftover buffer at the shell prompt
+tmux send-keys -t "$target_pane" C-c C-u
+sleep 0.05
