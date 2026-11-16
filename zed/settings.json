@@ -16,6 +16,9 @@
   "text_rendering_mode": "platform_default",
   "format_on_save": "on",
   "tab_size": 2,
+  "sticky_scroll": {
+    "enabled": true,
+  },
 
   // Inlay Hints (Required for Version Lens / Depsy / LSP hints)
   "inlay_hints": {
