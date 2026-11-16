@@ -16,8 +16,6 @@ export default function (pi: ExtensionAPI) {
       return undefined;
     }
 
-    const date = new Date().toISOString().slice(0, 10);
-
     // Extract user requests and context from transcript entries
     let promptContext = "";
     try {
@@ -47,17 +45,16 @@ export default function (pi: ExtensionAPI) {
     const systemPrompt = `You are a session naming assistant. Your task is to output a single canonical session name for an AI agent conversation.
 
 Format:
-YYYY-MM-DD_<project>_<verb-task>[_<#ticket>]
+<project>_<verb-task>[_<#ticket>]
 
 Rules:
-1. Start with the given date: ${date}.
-2. <project>: A concise lowercase slug for the project, repository, or tool (e.g. "dotfiles", "eea-frontend", "volto-eea-kitkat", "redmine", etc.). Infer it naturally from the working directory and conversation.
-3. <verb-task>: 2 to 5 lowercase hyphenated words describing the primary task or action (e.g. "add-approval-mode", "fix-catalog-indexing", "upgrade-cypress-tests").
-4. <#ticket>: Optional. If an issue or ticket ID is mentioned (e.g. #310194 or issue 39124), append it as "_#<number>". Otherwise omit.
+1. <project>: A concise lowercase slug for the project, repository, or tool (e.g. "dotfiles", "eea-frontend", "volto-eea-kitkat", "redmine", etc.). Infer it naturally from the working directory and conversation.
+2. <verb-task>: 2 to 5 lowercase hyphenated words describing the primary task or action (e.g. "add-approval-mode", "fix-catalog-indexing", "upgrade-cypress-tests").
+3. <#ticket>: Optional. If an issue or ticket ID is mentioned (e.g. #310194 or issue 39124), append it as "_#<number>". Otherwise omit.
+4. Do NOT include any date prefix (dates are tracked separately in the session picker).
 5. Output ONLY the session name string. No markdown, no quotes, no explanations, no trailing punctuation.`;
 
-    const userPrompt = `Date: ${date}
-Working directory: ${ctx.cwd || process.cwd()}
+    const userPrompt = `Working directory: ${ctx.cwd || process.cwd()}
 
 User conversation:
 ${promptContext}`;
@@ -81,8 +78,8 @@ ${promptContext}`;
       const raw = res?.content?.[0]?.type === "text" ? res.content[0].text : "";
       const cleaned = raw.trim().replace(/^["'`]|["'`]$/g, "").trim();
 
-      // Validate format: YYYY-MM-DD_...
-      if (/^\d{4}-\d{2}-\d{2}_[a-z0-9_-]+$/i.test(cleaned)) {
+      // Validate format: <project>_<verb-task>[_<#ticket>]
+      if (/^[a-z0-9_-]+_[a-z0-9_-]+$/i.test(cleaned)) {
         return cleaned;
       }
       return undefined;
