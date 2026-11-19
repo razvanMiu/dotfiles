@@ -608,7 +608,7 @@ colima start --disk 60 --cpu 4 --memory 8
 cd ~/.config
 git status
 git diff
-git add README.md CONTEXT.md docs/adr agents claude pi/agent scripts git zsh
+git add README.md GLOSSARY.md docs/adr agents claude pi/agent scripts git zsh
 git commit -m "update dotfiles"
 git push
 ```
