@@ -11,7 +11,7 @@ Scope: this repository only (`~/.config`). The global instructions in `~/.config
 ## Gates in this repository
 
 - Run `scripts/check-dotfiles-safety --quiet` and `scripts/check-dotfiles-lint` before finalizing; `git diff --check` catches whitespace.
-- The tracked pre-commit hook in `git/hooks/` runs both, so a commit that fails either is rejected.
+- The tracked pre-commit hook in `git/hooks/` runs all three gates, so a commit that fails any of them is rejected.
 - Never commit credentials: `.gitignore` is a default-deny allowlist, and secrets belong in `with-secrets`.
 
 ## Agent skills

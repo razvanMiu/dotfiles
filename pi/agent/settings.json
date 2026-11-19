@@ -5,7 +5,6 @@
   "defaultModel": "deepseek-v4.1-flash",
   "defaultThinkingLevel": "high",
   "enabledModels": [
-    "antigravity/*",
     "google/gemini-3.8*",
     "google/gemini-4-*",
     "openai/gpt-6*",
@@ -60,22 +59,27 @@
   "compaction": {
     "enabled": true,
     "reserveTokens": 16384,
-    "keepRecentTokens": 60000
+    "keepRecentTokens": 60000,
+    "modelOverrides": {
+      "ollama-cloud/gpt-oss:20b": { "keepRecentTokens": 32768 },
+      "ollama-cloud/gpt-oss:120b": { "keepRecentTokens": 32768 },
+      "eea-inhouse/Inhouse-LLM/gpt-oss-120b": { "keepRecentTokens": 32768 }
+    }
   },
   "observational-memory": {
     "compactAfterTokensMode": "ratio",
     "compactAfterTokensRatio": 0.5,
     "compactAfterTokens": 200000,
-    "observeAfterTokens": 30000,
-    "reflectAfterTokens": 60000,
-    "observationsPoolMaxTokens": 15000,
-    "observationsPoolTargetTokens": 8000,
+    "observeAfterTokens": 10000,
+    "reflectAfterTokens": 20000,
+    "observationsPoolMaxTokens": 30000,
+    "observationsPoolTargetTokens": 25000,
     "showWorkerNotifications": true,
     "agentMaxTokens": 8192,
     "model": {
-      "provider": "eea-inhouse",
-      "id": "Inhouse-LLM/qwen3.8-27b",
-      "thinking": "off"
+      "provider": "ollama-cloud",
+      "id": "minimax-m3.1-flash",
+      "thinking": "low"
     }
   },
   "terminal": {

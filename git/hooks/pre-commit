@@ -6,4 +6,5 @@ set -eu
 repo_root="$(git rev-parse --show-toplevel)"
 
 "$repo_root/scripts/check-dotfiles-lint" --quiet
+"$repo_root/scripts/check-compaction-config"
 "$repo_root/scripts/check-dotfiles-safety" --quiet

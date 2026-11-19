@@ -1,0 +1,201 @@
+#!/usr/bin/env bash
+# Verify the compaction settings keep every enabled model out of the thrash
+# regime. See the invariants in the compaction-policy spec.
+#
+#   keep_recent <= window/4              a tail larger than a quarter of the
+#                                        window leaves no room to summarize
+#   trigger - keep_recent >= window/8    the trigger must fire early enough
+#   keep_recent + reserve < window       the tail must fit inside the window
+#   observe * 2 <= smallest keep_recent  an observation gap wider than the
+#                                        smallest verbatim tail is a hole
+#   pool target >= 25000, strict < max   at 8000 every eviction is irreversible
+#   pool max >= 30000
+#   trigger < window - reserve           the memory extension must fire before
+#                                        Pi's overflow guard, or it never owns
+#                                        the compaction at all
+#
+# Windows are read as exact integers from the local model catalog, so this is
+# deterministic: no subprocess, no network, no credential-gated discovery.
+# Every model reachable through enabledModels is checked, not just the ones with
+# an override, so a newly enabled small-window model fails here.
+
+set -euo pipefail
+
+repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+python3 - "$repo_root" <<'PY'
+import fnmatch, json, os, sys
+
+repo_root = sys.argv[1]
+settings_path = os.path.join(repo_root, "pi/agent/settings.json")
+models_path = os.path.join(repo_root, "pi/agent/models.json")
+store_path = os.path.expanduser("~/.cache/pi/models-store.json")
+
+def load_jsonc(p):
+    raw = open(p).read()
+    import re
+    raw = re.sub(r'^\s*//.*$', '', raw, flags=re.M)
+    raw = re.sub(r',(\s*[}\]])', r'\1', raw)
+    return json.loads(raw)
+
+# --- exact windows from the local catalog -----------------------------------
+windows = {}
+sources = 0
+if os.path.exists(store_path):
+    sources += 1
+    for prov, pd in load_jsonc(store_path).items():
+        if not isinstance(pd, dict):
+            continue
+        for m in (pd.get("models") or []):
+            if isinstance(m, dict) and m.get("id") and m.get("contextWindow"):
+                windows.setdefault(f"{prov}/{m['id']}", int(m["contextWindow"]))
+if os.path.exists(models_path):
+    sources += 1
+    for prov, pd in load_jsonc(models_path).get("providers", {}).items():
+        for m in (pd.get("models") or []):
+            if isinstance(m, dict) and m.get("id") and m.get("contextWindow"):
+                windows.setdefault(f"{prov}/{m['id']}", int(m["contextWindow"]))
+
+if not sources:
+    print("skip: no local model catalog (models-store.json / models.json)")
+    sys.exit(0)
+
+settings = load_jsonc(settings_path)
+om = settings.get("observational-memory") or {}
+sub = settings.get("subagents") or {}
+compaction = settings.get("compaction") or {}
+overrides = compaction.get("modelOverrides") or {}
+
+# --- minimatch-style matching: '*' within a segment, '**' across segments ----
+def glob_match(segs, pats):
+    if not pats:
+        return not segs
+    if pats[0] == "**":
+        return any(glob_match(segs[i:], pats[1:]) for i in range(len(segs) + 1))
+    if not segs:
+        return False
+    return fnmatch.fnmatchcase(segs[0], pats[0]) and glob_match(segs[1:], pats[1:])
+
+def matches(key, patterns):
+    prov, mid = key.split("/", 1)
+    for p in patterns:
+        if "/" not in p:
+            if fnmatch.fnmatchcase(prov, p):
+                return True
+            continue
+        ppat, mpat = p.split("/", 1)
+        if fnmatch.fnmatchcase(prov, ppat) and glob_match(mid.split("/"), mpat.split("/")):
+            return True
+    return False
+
+# --- unsupported pattern syntax is a gap, not a no-op ------------------------
+problems = []
+for pattern in settings.get("enabledModels") or []:
+    if pattern.startswith("!") or "{" in pattern or "}" in pattern:
+        problems.append(
+            f"enabledModels {pattern!r}: negation/brace patterns are unsupported by this check "
+            f"and would be skipped silently"
+        )
+
+# --- which models can actually run ------------------------------------------
+watched = {}
+for pattern in settings.get("enabledModels") or []:
+    for key in windows:
+        if matches(key, [pattern]):
+            watched[key] = f"enabledModels {pattern}"
+if settings.get("defaultProvider") and settings.get("defaultModel"):
+    key = f"{settings['defaultProvider']}/{settings['defaultModel']}"
+    watched.setdefault(key, "defaultProvider/defaultModel")
+for role, cfg in (sub.get("agentOverrides") or {}).items():
+    if isinstance(cfg, dict) and cfg.get("model"):
+        watched.setdefault(cfg["model"], f"subagents.agentOverrides.{role}")
+if sub.get("defaultModel"):
+    watched.setdefault(sub["defaultModel"], "subagents.defaultModel")
+mem = om.get("model") or {}
+if mem.get("provider") and mem.get("id"):
+    watched.setdefault(f"{mem['provider']}/{mem['id']}", "observational-memory.model")
+for key in overrides:
+    watched.setdefault(key, "compaction.modelOverrides")
+
+ordinary_reserve = compaction.get("reserveTokens", 16384)
+ordinary_keep = compaction.get("keepRecentTokens", 20000)
+mode = om.get("compactAfterTokensMode", "calibrated")
+ratio = om.get("compactAfterTokensRatio", 0.68)
+calibrated = om.get("compactAfterTokens", 81000)
+
+effective_keeps = []
+notes = []
+for model, origin in sorted(watched.items()):
+    window = windows.get(model)
+    if not window:
+        notes.append(f"{model} ({origin}): not in the local catalog — skipped, unverified")
+        continue
+    ov = overrides.get(model) or {}
+    keep = int(ov.get("keepRecentTokens", ordinary_keep))
+    reserve = int(ov.get("reserveTokens", ordinary_reserve))
+    threshold = int(window * ratio) if mode == "ratio" else int(calibrated)
+    effective_keeps.append((keep, model))
+    if keep > window // 4:
+        problems.append(f"{model} ({origin}): keepRecentTokens {keep:,} > window/4 {window // 4:,}")
+    if threshold - keep < window // 8:
+        problems.append(
+            f"{model} ({origin}): {mode} trigger {threshold:,} leaves {threshold - keep:,} "
+            f"to summarize (< window/8 {window // 8:,})"
+        )
+    if threshold >= window - reserve:
+        problems.append(
+            f"{model} ({origin}): {mode} trigger {threshold:,} does not fire before the overflow "
+            f"guard {window - reserve:,} — the memory extension never controls compaction here"
+        )
+    if keep + reserve >= window:
+        problems.append(f"{model} ({origin}): keep {keep:,} + reserve {reserve:,} >= window {window:,}")
+
+# --- memory worker scope ceiling ---------------------------------------------
+# The observer's chunk cap is 0.2 x the worker's own window, so a small worker
+# silently localizes memory: it can never relate work done further apart than
+# one chunk. Require a window that keeps the cap near 200K.
+worker_window = windows.get(f"{mem.get('provider')}/{mem.get('id')}") if mem.get("provider") and mem.get("id") else None
+if mem.get("provider") and mem.get("id") and not worker_window:
+    notes.append(f"memory worker {mem['provider']}/{mem['id']}: not in the local catalog — scope ceiling unverified")
+elif worker_window and worker_window < 1_000_000:
+    problems.append(
+        f"observational-memory worker {mem['provider']}/{mem['id']}: window {worker_window:,} < 1,000,000, "
+        f"so the observer chunk cap is {worker_window // 5:,} and memory localizes to that span"
+    )
+
+min_keep, min_keep_model = min(effective_keeps) if effective_keeps else (ordinary_keep, "n/a")
+observe = int(om.get("observeAfterTokens", 10000))
+if observe * 2 > min_keep:
+    problems.append(
+        f"observeAfterTokens {observe:,} is not well under the smallest verbatim tail "
+        f"{min_keep:,} ({min_keep_model})"
+    )
+
+pool_target = om.get("observationsPoolTargetTokens")
+pool_max = om.get("observationsPoolMaxTokens")
+if pool_target is None or pool_target < 25000:
+    problems.append(f"observationsPoolTargetTokens {pool_target:,} < 25,000 (irreversible eviction)"
+                    if pool_target is not None else "observationsPoolTargetTokens unset")
+if pool_max is None or pool_max < 30000:
+    problems.append(f"observationsPoolMaxTokens {pool_max:,} < 30,000"
+                    if pool_max is not None else "observationsPoolMaxTokens unset")
+if pool_target is not None and pool_max is not None and not pool_target < pool_max:
+    problems.append(
+        f"observationsPoolTargetTokens {pool_target:,} must be strictly < "
+        f"observationsPoolMaxTokens {pool_max:,} (the extension rejects equal and falls back)"
+    )
+
+if problems:
+    for p in problems:
+        print(f"FAIL {p}")
+    for n in notes:
+        print(f"note {n}")
+    sys.exit(1)
+
+for n in notes:
+    print(f"note {n}")
+
+print(f"ok: {len(watched)} enabled model(s) verified, "
+      f"mode {mode} ({f'ratio {ratio}' if mode == 'ratio' else f'calibrated {calibrated:,}'}), "
+      f"smallest tail {min_keep:,}, observe {observe:,}, pool {pool_target:,}/{pool_max:,}")
+PY
