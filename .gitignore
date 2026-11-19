@@ -12,8 +12,9 @@
 # Files
 !/.env.example
 !/.gitignore
+!/.scratch/
 !/AGENTS.md
-!/CONTEXT.md
+!/GLOSSARY.md
 !/README.md
 !/KEYBINDINGS.md
 
